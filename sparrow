@@ -1,0 +1,2 @@
+#!/usr/bin/env julia --project
+using Sparrow; Sparrow.main()
