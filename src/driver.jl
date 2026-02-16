@@ -11,12 +11,16 @@ function parse_arguments(args)
             help = "Process an incoming realtime datastream"
             action = :store_true
         "--force_reprocess"
-            help = "Force reprocessing of a completed volume"
+            help = "Force reprocessing of previously processed data"
             action = :store_true
         "--log_prefix"
             help = "Log file prefix"
             arg_type = String
             default = "default"
+        "--threads"
+            help = "Number of threads"
+            arg_type = Int
+            default = 1
         "--num_workers"
             help = "Number of worker processes"
             arg_type = Int
@@ -31,8 +35,8 @@ function parse_arguments(args)
         "--slurm"
             help = "Run on Slurm"
             action = :store_true
-        "--paths"
-            help = "File containing data paths"
+        "--paths_file"
+            help = "File overriding data paths"
             arg_type = String
             default = "none"
         "workflow"
@@ -49,16 +53,14 @@ function setup_workers(parsed_args)
     email_flags = email_address != "none" ? "eas" : "n"
 
     if parsed_args["sge"]
-        num_threads = Threads.nthreads()
-        println("Initializing SGE with $(num_workers) workers and $(num_threads) threads")
+        println("𓅪 Initializing Sparrow on SGE with $(num_workers) workers and $(Threads.nthreads()) threads")
         ClusterManagers.addprocs_sge(num_workers;
             qsub_flags=`-q all.q -pe mpi $(num_threads) -m $(email_flags) -M $(email_address)`)
     elseif parsed_args["slurm"]
-        num_threads = Threads.nthreads()
-        println("Initializing Slurm with $(num_workers) workers and $(num_threads) threads")
+        println("𓅪 Initializing Sparrow on Slurm with $(num_workers) workers and $(Threads.nthreads()) threads")
         addprocs(SlurmManager())
     else
-        println("Using local node for processing")
+        println("𓅪 Initializing Sparrow locally with $(num_workers) workers and $(Threads.nthreads()) threads")
         addprocs(num_workers)
     end
 

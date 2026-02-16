@@ -1,2 +1,44 @@
-#!/usr/bin/env julia --project
-using Sparrow; Sparrow.main()
+#!/usr/bin/env julia
+
+# Check if -t/--threads argument is provided
+# If so, re-launch Julia with the correct number of threads
+function check_threads(args)
+    for i in 1:length(args)
+        if args[i] == "-t" || args[i] == "--threads"
+            if i < length(args)
+                num_threads = args[i+1]
+                # Remove -t and its value from args
+                remaining_args = [args[1:i-1]; args[i+2:end]]
+                # Re-launch Julia with the correct thread count
+                julia_exe = joinpath(Sys.BINDIR, "julia")
+                script = @__FILE__
+                cmd = `$julia_exe -t $num_threads $script $remaining_args`
+                exit(run(cmd).exitcode)
+            end
+        end
+    end
+end
+
+check_threads(ARGS)
+
+using Sparrow
+
+# Parse arguments at top level
+parsed_args = Sparrow.parse_arguments(ARGS)
+
+# Include the workflow file at ACTUAL top level - no world age issues!
+workflow_file = parsed_args["workflow"]
+Base.include(Sparrow, workflow_file)
+workflow = Sparrow.workflow
+
+# Override the paths if a paths file is provided, otherwise assume the workflow file has set the paths in the workflow dict
+if parsed_args["paths_file"] != "none"
+    paths_file = parsed_args["paths_file"]
+    include(paths_file)
+    workflow["base_data_dir"] = base_data_dir
+    workflow["base_working_dir"] = base_working_dir
+    workflow["base_archive_dir"] = base_archive_dir
+    workflow["base_plot_dir"] = base_plot_dir
+end
+# Now run everything else
+Sparrow.main(workflow, parsed_args)

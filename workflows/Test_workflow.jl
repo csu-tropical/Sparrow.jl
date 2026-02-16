@@ -3,7 +3,9 @@
 
 # Define custom steps
 @workflow_step TestStep1
-@workflow_step TestStep2
+
+# Test renaming of step types as aliases
+TestStep2 = PassThroughStep
 
 workflow = TestWorkflow(
 
@@ -17,14 +19,14 @@ workflow = TestWorkflow(
     reverse = false,
 
     steps = [
-        "TestStep1" => TestStep1
-        "TestStep2" => TestStep2
+        "pass" => PassThroughStep,
+        "pass2" => TestStep1,
+        "copy" => TestStep2
     ],
-
-    # If true, then archive this product, otherwise it is temporary and will be deleted after the workflow is complete
     archive = [
-        "TestStep1" => false,
-        "TestStep2" => true
+        "pass" => false,
+        "pass2" => false,
+        "copy" => true
     ],
 
     # Raw moment names
@@ -37,14 +39,14 @@ workflow = TestWorkflow(
     sqi_threshold = 0.35
 )
 
-function workflow_step(workflow::TestWorkflow, TestStep1, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, kwargs...)
+function workflow_step(workflow::TestWorkflow, ::Type{TestStep1}, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, step_name::String, kwargs...)
 
     println("Executing Step $(step_name) for $(typeof(workflow)) ...")
-    copy_each_file(input_dir, output_dir, start_time, stop_time)
-end
-
-function workflow_step(workflow::TestWorkflow, TestStep2, input_dir::String, output_dir::String; step_name::String, kwargs...)
-
-    # Do nothing
-    println("Executing Step $(step_name) for $(typeof(workflow)) ...")
+    # Identical to PassThroughStep for testing
+    input_files = readdir(input_dir; join=true)
+    filter!(!isdir, input_files)
+    for input_file in input_files
+        output_file = replace(input_file, input_dir => output_dir)
+        cp(input_file, output_file, follow_symlinks=true)
+    end
 end

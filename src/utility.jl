@@ -1,27 +1,24 @@
-function copy_each_file(input_dir, output_dir, start_time::DateTime, stop_time::DateTime)
-    # Pass through if within the time limit
+@workflow_step PassThroughStep
+function workflow_step(workflow::SparrowWorkflow, ::Type{PassThroughStep}, input_dir::String, output_dir::String;
+    step_name="PassThroughStep", start_time::DateTime, stop_time::DateTime, kwargs...)
+
+    # Pass through to next step regardless of time
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
-    for file in input_files
-        scan_start = get_scan_start(file)
-        #println("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
-        if scan_start < start_time || scan_start >= stop_time
-            #println("Skipping $file")
-            continue
-        else
-            output_file = replace(input_file, input_dir => output_dir)
-            cp(input_file, output_file)
-        end
+    for input_file in input_files
+        output_file = replace(input_file, input_dir => output_dir)
+        cp(input_file, output_file, follow_symlinks=true)
     end
 end
 
-function workflow_step(workflow::SparrowWorkflow, filterByTime, input_dir::String, output_dir::String;
-    step_name="filterByTime", start_time::DateTime, stop_time::DateTime)
+@workflow_step filterByTimeStep
+function workflow_step(workflow::SparrowWorkflow, ::Type{filterByTimeStep}, input_dir::String, output_dir::String;
+    step_name="filterByTimeStep", start_time::DateTime, stop_time::DateTime, kwargs...)
 
     # Pass through if within the time limit
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
-    for file in input_files
+    for input_file in input_files
         scan_start = get_scan_start(file)
         #println("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
         if scan_start < start_time || scan_start >= stop_time
@@ -29,7 +26,7 @@ function workflow_step(workflow::SparrowWorkflow, filterByTime, input_dir::Strin
             continue
         else
             output_file = replace(input_file, input_dir => output_dir)
-            cp(input_file, output_file)
+            cp(input_file, output_file, follow_symlinks=true)
         end
     end
 end

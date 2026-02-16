@@ -65,24 +65,7 @@ macro workflow_step(name)
     end
 end
 
-function run_workflow(parsed_args)
-
-    # Load the workflow file
-    workflow_file = parsed_args["workflow"]
-    include(workflow_file)
-
-    # Set up the distributed environment
-    # Send the workflow file path to all workers and have them include it
-    # This defines the type on each worker
-    @everywhere workers() begin
-        Base.include(Sparrow, $workflow_file)
-    end
-
-    # Store type name and params in the workflow dict for workers to reconstruct
-    workflow_type_name = typeof(workflow).name.name
-    workflow["workflow_type_name"] = String(workflow_type_name)
-    num_workers = length(workers())
-    workflow["num_workers"] = num_workers
+function run_workflow(workflow::SparrowWorkflow, parsed_args)
 
     # Override the log_prefix if provided in the arguments, otherwise use a default based on the workflow type and current time
     log_prefix = "$(typeof(workflow))_$(Dates.format(now(UTC), "YYYYmmdd_HHMMSS"))"
@@ -90,56 +73,12 @@ function run_workflow(parsed_args)
         log_prefix = parsed_args["log_prefix"]
     end
 
-    # Override the paths if a paths file is provided, otherwise assume the workflow file has set the paths in the workflow dict
-    if parsed_args["paths"] != "none"
-        paths_file = parsed_args["paths"]
-        include(paths_file)
-        workflow["base_data_dir"] = base_data_dir
-        workflow["base_working_dir"] = base_working_dir
-        workflow["base_archive_dir"] = base_archive_dir
-        workflow["base_plot_dir"] = base_plot_dir
-    end
+    # Set all the parameters from the provided workflow file or command line arguments
+    setup_workflow_params(workflow, parsed_args)
 
-    if parsed_args["realtime"] && parsed_args["datetime"] != "now"
-        error("Cannot specify a datetime when running in realtime mode. Please remove the --datetime argument or remove the --realtime flag.")
-    end
-
-    if (haskey(workflow.params, "realtime") && workflow["realtime"]) || parsed_args["realtime"]
-        println("Running in realtime mode")
-        workflow["realtime"] = true
-    else
-        workflow["realtime"] = false
-    end
-
-    datetime = parsed_args["datetime"]
-    if haskey(workflow.params, "datetime") && datetime != "now"
-        println("Overriding datetime in workflow file with $datetime datetime provided in arguments")
-    end
-    workflow["datetime"] = datetime
-
-    # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
-    if datetime == "now"
-        workflow["datetime"] = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
-    end
-
-    # Fix if user mistakenly put "SEA" in front of the datetime
-    if (startswith(datetime, "SEA"))
-        workflow["datetime"] = datetime[4:end]
-    end
-
-    println("Running in archive mode on data from $(workflow["datetime"])")
-
-    if parsed_args["force_reprocess"]
-        workflow["force"] = parsed_args["force_reprocess"]
-    else
-        workflow["force"] = get_param(workflow, "force", false)
-    end
-
-    # Add the moment names and grid types to the workflow dict so they can be accessed by the worker processes
-    raw_moment_dict, qc_moment_dict, grid_type_dict = Daisho.initialize_moment_dictionaries(workflow["raw_moment_names"], workflow["qc_moment_names"], workflow["moment_grid_type"])
-    workflow["raw_moment_dict"] = raw_moment_dict
-    workflow["qc_moment_dict"] = qc_moment_dict
-    workflow["grid_type_dict"] = grid_type_dict
+    # Save the original stdout/stderr before redirection
+    original_stdout = stdout
+    original_stderr = stderr
 
     # Set up the log files and redirect the output
     outfile = log_prefix * "_out.log"
@@ -150,6 +89,7 @@ function run_workflow(parsed_args)
     redirect_stderr(err)
 
     # Redirect the output on each worker process to a separate log file if more than one worker
+    num_workers = length(workers())
     if num_workers > 1
         for i in 1:num_workers
             local outfile = log_prefix * "_out_$(i).log"
@@ -176,47 +116,113 @@ function run_workflow(parsed_args)
         wait(get_from(workers()[i], :(close(out))))
         wait(get_from(workers()[i], :(close(err))))
     end
+
+    # Restore original stdout/stderr
+    redirect_stdout(original_stdout)
+    redirect_stderr(original_stderr)
+
+    return true
+end
+
+function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
+    # This function can be used to set up any workflow specific parameters or directories before processing starts
+
+    # Store type name and params in the workflow dict for workers to reconstruct
+    workflow_type_name = typeof(workflow).name.name
+    workflow["workflow_type_name"] = String(workflow_type_name)
+    num_workers = length(workers())
+    workflow["num_workers"] = num_workers
+
+    if parsed_args["realtime"] && parsed_args["datetime"] != "now"
+        error("𓅪 Cannot specify a datetime when running in realtime mode. Please remove the --datetime argument or remove the --realtime flag.")
+    end
+
+    if (haskey(workflow.params, "realtime") && workflow["realtime"]) || parsed_args["realtime"]
+        println("𓅪 Running in realtime mode")
+        workflow["realtime"] = true
+        workflow["datetime"] = "now"
+    else
+        workflow["realtime"] = false
+        datetime = parsed_args["datetime"]
+        if haskey(workflow.params, "datetime") && datetime != "now"
+            println("𓅪 Overriding datetime in workflow file with $datetime datetime provided in arguments")
+        end
+        workflow["datetime"] = datetime
+
+        # Fix if user mistakenly put "SEA" in front of the datetime
+        if (startswith(datetime, "SEA"))
+            workflow["datetime"] = datetime[4:end]
+        end
+
+        println("𓅪 Running in archive mode on $(workflow["datetime"])")
+    end
+
+    if parsed_args["force_reprocess"]
+        workflow["force_reprocess"] = parsed_args["force_reprocess"]
+    else
+        workflow["force_reprocess"] = get_param(workflow, "force_reprocess", false)
+    end
+
+    # Add the moment names and grid types to the workflow dict so they can be accessed by the worker processes
+    raw_moment_dict, qc_moment_dict, grid_type_dict = Daisho.initialize_moment_dictionaries(workflow["raw_moment_names"], workflow["qc_moment_names"], workflow["moment_grid_type"])
+    workflow["raw_moment_dict"] = raw_moment_dict
+    workflow["qc_moment_dict"] = qc_moment_dict
+    workflow["grid_type_dict"] = grid_type_dict
+
+    return workflow
 end
 
 # Main function to process radar data
 function assign_workers(workflow::SparrowWorkflow)
 
     println("Processing data with $(typeof(workflow))...")
+    base_data_dir = workflow["base_data_dir"]
+    base_archive_dir = workflow["base_archive_dir"]
 
     # Process a time period of radar data
-    if workflow["realtime"]
+    if !workflow["realtime"]
+        # Process using the datetime provided in the arguments
+        wait(get_from(workers()[1], :(process_workflow($(workflow)))))
+    else
+        # Process realtime loop
         println("Watching for real time data...")
         flush(stdout)
         status = "Starting"
         # Allow up to num_workers parallel processes to occur simultaneously
+        num_workers = length(workers())
         tasks = Array{Distributed.Future}(undef, num_workers)
         filequeue = fill("none", length(tasks))
+        # Implement some time limits on tasks to check on them
+        timequeue = fill(now(UTC), length(tasks))
         while true
             radar_date = Dates.format(now(UTC), "YYYYmmdd")
-            sigmet_raw = base_data_dir * "/" * radar_date
-            mkpath(sigmet_raw)
-            raw_files = readdir(sigmet_raw)
+            raw_dir = joinpath(base_data_dir, radar_date)
+            # Check to make sure directory exists
+            mkpath(raw_dir)
+            raw_files = readdir(raw_dir)
             filter!(!isdir, raw_files)
             #println("Checking for new data at $(now(UTC))...")
-            flush(stdout)
+            #flush(stdout)
             for file in reverse(raw_files)
                 #println("Checking $file...")
-                flush(stdout)
+                #flush(stdout)
                 # Skip if it is hidden file, which means rsync is still writing, or if it is already in the queue
                 if startswith(file, ".")
                     continue
                 end
-                radar_date = Dates.format(now(UTC), "YYYYmmdd")
-                radar_time = file[end-5:end] #HHMMSS
 
                 # Check if the file is already processed
-                status = check_processed(file, base_archive_dir)
-                if status == "processed"
+                if check_processed(workflow, file, base_archive_dir)
                     #println("$file already processed, skipping...")
                     #flush(stdout)
                     continue
+                elseif (file in filequeue)
+                    #println("$file is in the queue and being processed...")
+                    #flush(stdout)
+                    continue
                 end
-                # File is not hidden and has not been processed
+
+                # File is not hidden and has not been processed so try to schedule it
                 if !(file in filequeue)
                     # Found some data to process
                     println("Current queue: $filequeue")
@@ -226,15 +232,13 @@ function assign_workers(workflow::SparrowWorkflow)
                         if !isassigned(tasks, t) || filequeue[t] == "none"
                             # Found an open task slot so start processing
                             filequeue[t] = file
-                            #tasks[t] = get_from(workers()[t], :(process_workflow($workflow)))
-                            # Reconstruct workflow on worker instead of serializing it
                             tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-
                             println("$file being processed in empty task slot $t at $(now(UTC))")
                             flush(stdout)
                             break
                         elseif isassigned(tasks, t) && filequeue[t] != "none"
-                            if check_processed(filequeue[t], base_archive_dir) == "processed"
+                            # Check if the previous task is done processing, and if so clear it from the filequeue and assign new file
+                            if check_processed(workflow, filequeue[t], base_archive_dir)
                                 println("Clearing task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
@@ -253,7 +257,7 @@ function assign_workers(workflow::SparrowWorkflow)
                     end
                 end
 
-                # Check if the queue is full
+                # Check if the file was successfully queued or queue is full
                 if !(file in filequeue)
                     # Queue is full, wait for the first task to finish
                     println("Queue full, waiting to schedule $file")
@@ -266,7 +270,7 @@ function assign_workers(workflow::SparrowWorkflow)
                             flush(stdout)
                         end
                         for t in 1:length(tasks)
-                            if check_processed(filequeue[t], base_archive_dir) == "processed"
+                            if check_processed(workflow, filequeue[t], base_archive_dir)
                                 println("Fetching status on task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
@@ -275,9 +279,9 @@ function assign_workers(workflow::SparrowWorkflow)
                                     flush(stdout)
                                 end
                                 println("Task $t $status at $(now(UTC))")
+                                flush(stdout)
                                 filequeue[t] = file
                                 free_task = t
-                                flush(stdout)
                                 break
                             end
                         end
@@ -299,8 +303,9 @@ function assign_workers(workflow::SparrowWorkflow)
 
             # Made it to the end of the file checking loop, clear the queue if we can
             for t in 1:length(tasks)
-                if check_processed(filequeue[t], base_archive_dir) == "processed"
+                if check_processed(workflow, filequeue[t], base_archive_dir)
                     println("Fetching status on task $t at $(now(UTC))")
+                    flush(stdout)
                     try
                         status = fetch(tasks[t])
                     catch e
@@ -308,17 +313,14 @@ function assign_workers(workflow::SparrowWorkflow)
                         flush(stdout)
                     end
                     println("Task $t $status at $(now(UTC))")
-                    filequeue[t] = "none"
                     flush(stdout)
+                    filequeue[t] = "none"
                 end
             end
 
             # Wait for a bit before checking again
             sleep(5)
         end
-    else
-        # Process using the datetime provided in the arguments
-        wait(get_from(workers()[1], :(process_workflow($(workflow)))))
     end
 
     return true
@@ -326,12 +328,17 @@ end
 
 function process_workflow(workflow::SparrowWorkflow)
 
-    # Set the local variables from thw workflow
+    # Set the local variables from the workflow
     datetime = workflow["datetime"]
     minute_span = workflow["minute_span"]
-    force = workflow["force"]
+    force_reprocess = workflow["force_reprocess"]
     reverse = workflow["reverse"]
     base_archive_dir = workflow["base_archive_dir"]
+
+    # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
+    if datetime == "now"
+        datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
+    end
 
     if length(datetime) < 8
         error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
@@ -357,7 +364,8 @@ function process_workflow(workflow::SparrowWorkflow)
             start_time = base_datetime + Dates.Minute(t)
             stop_time = start_time + Dates.Minute(minute_span)
             println("Processing $(Dates.format(start_time, "HHMM"))...")
-            processed_files = process_volume(workflow, start_time, stop_time)
+            volume_files = process_volume(workflow, start_time, stop_time)
+            append!(processed_files, volume_files)
         end
     elseif length(datetime) == 11
         hr = datetime[10:11]
@@ -373,17 +381,27 @@ function process_workflow(workflow::SparrowWorkflow)
             start_time = base_datetime + Dates.Minute(t)
             stop_time = start_time + Dates.Minute(minute_span)
             println("Processing $(Dates.format(start_time, "HHMM"))...")
-            processed_files = process_volume(workflow, start_time, stop_time)
+            volume_files = process_volume(workflow, start_time, stop_time)
+            append!(processed_files, volume_files)
         end
     else
         hr = datetime[10:11]
         min = datetime[12:13]
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
         stop_time = start_time + Dates.Minute(minute_span)
+        println("Processing $(Dates.format(start_time, "HHMM"))...")
         processed_files = process_volume(workflow, start_time, stop_time)
     end
 
+    # Mark files as processed by touching a hidden file in the archive directory
+    mkpath(base_archive_dir * "/.sparrow/")
+    for file in processed_files
+        hidden_file = "$(base_archive_dir)/.sparrow/$(typeof(workflow))_$(basename(file))"
+        touch(hidden_file)
+    end
+
     flush(stdout)
+    return "processed successfully"
 end
 
 function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
@@ -402,7 +420,7 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     end
 
     # Clean up and move to archive
-    processed_files = archive_workflow(workflow, temp_dir)
+    processed_files = archive_workflow(workflow, temp_dir, date)
 
     # Remove the temporary directories
     rm(temp_dir, recursive=true)
@@ -441,60 +459,15 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
     end
 end
 
-function check_processed(date, time, archive_dir)
+function check_processed(workflow::SparrowWorkflow, file::String, archive_dir::String)
 
     # Make sure the hidden processed directory exists
-    processed_dir = archive_dir * "/.sparrow/"
+    processed_dir = joinpath(archive_dir,".sparrow")
     mkpath(processed_dir)
-
-    # Check to see if the data is already processed
-    sigmet_file = ""
-    if time == "now"
-        sigmet_file = find_sigmet_data(date)
-    else
-        sigmet_file = find_sigmet_data(date, time)
-    end
-    if sigmet_file == nothing
-        return "none"
-    end
-
-    processed_file = processed_dir * basename(sigmet_file)
+    processed_file = "$(processed_dir)/$(typeof(workflow))_$(basename(file))"
     if isfile(processed_file)
-        return "processed"
+        return true
     else
-        return "ready"
+        return false
     end
 end
-
-#function check_processed(workflow::SparrowWorkflow)
-#    processed_composite_dir = base_archive_dir * "/gridded_data/composite/" * date
-#    processed_composite = processed_composite_dir * "/gridded_composite_" * Dates.format(starttime, "YYYYmmdd_HHMM") * ".nc"
-#    processed_rhi_dir = base_archive_dir * "/gridded_data/rhi/" * date
-#    rhi_files = readdir(processed_rhi_dir)
-#    processed_rhi = "gridded_rhi_" * Dates.format(starttime, "YYYYmmdd_HHMM")
-#    rhi_files = any(f -> occursin(processed_rhi, f), rhi_files)
-#    if isfile(processed_composite) || rhi_files
-#        println("Data already processed! To reprocess use '--force_reprocess true'")
-#        continue
-#    end
-#end
-
-# QC the data
-#run_qc_workflow(workflow, date, start_time, stop_time, temp_dir, qc_base, raw_moment_dict, qc_moment_dict, dbz_threshold, vel_threshold, sw_threshold)
-#run_qc_workflow(workflow)
-#flush(stdout)
-
-# Merge volumes together if needed
-#run_merge_workflow(workflow, qc_moment_dict, cfrad_qc, cfrad_merge_dir)
-#run_merge_workflow(workflow)
-#flush(stdout)
-
-# Grid the volumes
-#run_grid_workflow(workflow, qc_moment_dict, cfrad_merge_dir, composite_grid_dir, ppi_grid_dir, rhi_grid_dir, qvp_grid_dir)
-#run_grid_workflow(workflow)
-#flush(stdout)
-
-# Plot the data
-#run_plot_workflow(workflow, qc_moment_dict, qc_moment_dict, cfrad_merge_dir, composite_grid_dir, ppi_grid_dir, rhi_grid_dir, qvp_grid_dir)
-#run_plot_workflow(workflow)
-#flush(stdout)

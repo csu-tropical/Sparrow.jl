@@ -1,4 +1,46 @@
 # Gridding helper functions and workflow steps
+@workflow_step GridRHIStep
+function workflow_step(workflow::SparrowWorkflow, step_type::GridRHIStep, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, step_name::String, kwargs...)
+
+    println("Executing Step $(step_name) for $(typeof(workflow)) ...")
+    qc_moment_dict = workflow["qc_moment_dict"]
+    grid_type_dict = workflow["grid_type_dict"]
+    rmin = workflow["rmin"]
+    rincr = workflow["rincr"]
+    rdim = workflow["rdim"]
+    rhi_zmin = workflow["rhi_zmin"]
+    rhi_zincr = workflow["rhi_zincr"]
+    rhi_zdim = workflow["rhi_zdim"]
+    beam_inflation = workflow["beam_inflation"]
+    rhi_power_threshold = workflow["rhi_power_threshold"]
+    missing_key = workflow["missing_key"]
+    valid_key = workflow["valid_key"]
+
+    # Grid if within the time limit
+    input_files = readdir(input_dir; join=true)
+    filter!(!isdir, input_files)
+    for file in input_files
+        scan_start = get_scan_start(file)
+        #println("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
+        if scan_start < start_time || scan_start >= stop_time
+            #println("Skipping $file")
+            continue
+        else
+            radar_volume = Daisho.read_cfradial(file, qc_moment_dict)
+            rhis = Daisho.split_sweeps(radar_volume)
+            for rhi in rhis
+                # Grid the RHI
+                output_file = output_dir * "/gridded_rhi_" *
+                    Dates.format(start_time, "YYYYmmdd_HHMM") *
+                    "_" * @sprintf("%.1f",rhi.fixed_angles[1]) * ".nc"
+                println("Gridding RHI $output_file")
+                flush(stdout)
+                @time Daisho.grid_radar_rhi(rhi, qc_moment_dict, grid_type_dict, output_file, start_time,
+                    rmin, rincr, rdim, rhi_zmin, rhi_zincr, rhi_zdim, beam_inflation, rhi_power_threshold, missing_key, valid_key)
+            end
+        end
+    end
+end
 
 function grid_composite(composite_grid_dir,date,radar_volume, qc_moment_dict, grid_type_dict, output_file, start_time,
     long_xmin, long_xincr, long_xdim, long_ymin, long_yincr, long_ydim, beam_inflation, missing_key, valid_key, mean_heading)

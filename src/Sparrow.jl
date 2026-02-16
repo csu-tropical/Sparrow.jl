@@ -29,17 +29,22 @@ include("utility.jl")
 
 export @workflow_type, @workflow_step, assign_workers, run_workflow, process_workflow
 
-function main(args=ARGS)
+function main(workflow::SparrowWorkflow, parsed_args)
 
     println("𓅪 Starting Sparrow workflow... ")
-    parsed_args = parse_arguments(args)
 
     # Setup distributed workers
     setup_workers(parsed_args)
 
+    # Load the workflow file on all workers
+    workflow_file = parsed_args["workflow"]
+    @everywhere workers() begin
+        Base.include(Sparrow, $workflow_file)
+    end
+
     try
         # Run the workflow
-        run_workflow(parsed_args)
+        run_workflow(workflow, parsed_args)
     finally
         # Clean up workers
         rmprocs(workers())
