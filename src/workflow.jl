@@ -182,7 +182,12 @@ function assign_workers(workflow::SparrowWorkflow)
     # Process a time period of radar data
     if !workflow["realtime"]
         # Process using the datetime provided in the arguments
-        wait(get_from(workers()[1], :(process_workflow($(workflow)))))
+        try
+            wait(get_from(workers()[1], :(process_workflow($(workflow)))))
+        catch e
+            println("Error processing workflow: $e")
+            flush(stdout)
+        end
     else
         # Process realtime loop
         println("Watching for real time data...")
@@ -237,8 +242,22 @@ function assign_workers(workflow::SparrowWorkflow)
                             flush(stdout)
                             break
                         elseif isassigned(tasks, t) && filequeue[t] != "none"
-                            # Check if the previous task is done processing, and if so clear it from the filequeue and assign new file
-                            if check_processed(workflow, filequeue[t], base_archive_dir)
+                            # Non-blocking check if the task errored
+                            if isready(tasks[t])
+                                try
+                                    status = fetch(tasks[t])
+                                    println("Task $t $status at $(now(UTC))")
+                                catch e
+                                    println("Task $t errored: $e at $(now(UTC))")
+                                end
+                                flush(stdout)
+                                filequeue[t] = file
+                                tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
+                                println("$file took over task slot $t at $(now(UTC))")
+                                flush(stdout)
+                                break
+                            elseif check_processed(workflow, filequeue[t], base_archive_dir)
+                                # Check if the previous task is done processing, and if so clear it from the filequeue and assign new file
                                 println("Clearing task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
@@ -270,12 +289,24 @@ function assign_workers(workflow::SparrowWorkflow)
                             flush(stdout)
                         end
                         for t in 1:length(tasks)
-                            if check_processed(workflow, filequeue[t], base_archive_dir)
+                            # Non-blocking check if task errored
+                            if isready(tasks[t])
+                                try
+                                    status = fetch(tasks[t])
+                                    println("Task $t completed: $status at $(now(UTC))")
+                                catch e
+                                    println("Task $t errored: $e at $(now(UTC))")
+                                end
+                                flush(stdout)
+                                filequeue[t] = file
+                                free_task = t
+                                break
+                            elseif check_processed(workflow, filequeue[t], base_archive_dir)
                                 println("Fetching status on task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
                                 catch e
-                                    println("Error $e fetching $status at $(now(UTC))")
+                                    println("Error $e fetching task $t at $(now(UTC))")
                                     flush(stdout)
                                 end
                                 println("Task $t $status at $(now(UTC))")
@@ -303,13 +334,30 @@ function assign_workers(workflow::SparrowWorkflow)
 
             # Made it to the end of the file checking loop, clear the queue if we can
             for t in 1:length(tasks)
-                if check_processed(workflow, filequeue[t], base_archive_dir)
+                if !isassigned(tasks, t) || filequeue[t] == "none"
+                    continue
+                end
+
+                # Non-blocking check if the task has completed or errored
+                if isready(tasks[t])
+                    try
+                        status = fetch(tasks[t])
+                        println("Task $t completed with status: $status at $(now(UTC))")
+                        flush(stdout)
+                    catch e
+                        println("Task $t errored: $e at $(now(UTC))")
+                        flush(stdout)
+                    end
+                    # Either way, clear the slot
+                    filequeue[t] = "none"
+                elseif check_processed(workflow, filequeue[t], base_archive_dir)
+                    # Task isn't ready yet but file shows as processed
                     println("Fetching status on task $t at $(now(UTC))")
                     flush(stdout)
                     try
                         status = fetch(tasks[t])
                     catch e
-                        println("Error $e fetching $status at $(now(UTC))")
+                        println("Error $e fetching task $t at $(now(UTC))")
                         flush(stdout)
                     end
                     println("Task $t $status at $(now(UTC))")

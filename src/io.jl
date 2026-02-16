@@ -3,17 +3,16 @@
 function initialize_working_dirs(workflow::SparrowWorkflow, date)
 
     # Set up the working directories
-    base_data_dir = workflow["base_data_dir"]
     base_working_dir = workflow["base_working_dir"]
     steps = length(workflow["steps"])
-
+    force_reprocess = workflow["force_reprocess"]
     temp_dir = joinpath(base_working_dir, randstring(6))
     mkpath(temp_dir)
 
     # This directory holds raw data from the base_data_dir, which may be in SIGMET format or already converted to CfRadial
-    raw_dir = joinpath(temp_dir, "raw_data", date)
-    mkpath(raw_dir)
-    link_base_data(date, base_data_dir, raw_dir)
+    raw_working_dir = joinpath(temp_dir, "raw_data", date)
+    mkpath(raw_working_dir)
+    link_base_data(date, workflow, raw_working_dir, force_reprocess)
 
     for (step_num, (step_name, step_type)) in enumerate(workflow["steps"])
         step_dir = joinpath(temp_dir, step_name, date)
@@ -52,14 +51,21 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
     return processed_files
 end
 
-function link_base_data(date, base_dir, raw_dir)
+function link_base_data(date, workflow, raw_working_dir, force_reprocess)
 
-    data_files = readdir("$(base_dir)/$(date)"; join=true)
+    base_data_dir = workflow["base_data_dir"]
+    base_archive_dir = workflow["base_archive_dir"]
+    data_files = readdir("$(base_data_dir)/$(date)"; join=true)
     filter!(!isdir,data_files)
     for file in data_files
-        target = file
-        link = raw_dir * "/" * basename(file)
-        symlink(target,link)
+        if force_reprocess || !check_processed(workflow, file, base_archive_dir)
+            target = file
+            link = raw_working_dir * "/" * basename(file)
+            symlink(target,link)
+        else
+            println("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
+            flush(stdout)
+        end
     end
 end
 
