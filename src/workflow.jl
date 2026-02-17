@@ -392,11 +392,46 @@ function process_workflow(workflow::SparrowWorkflow)
     day = datetime[7:8]
 
     processed_files = []
-    if length(datetime) == 8
+    if length(datetime) == 6
+        # Process a whole month
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
-        # Process the whole day in 5 minute chunks
-        println("Processing the whole day...")
+        println("Processing one month...")
         flush(stdout)
+        dayrange = 0:30
+        if reverse
+            dayrange = reverse(dayrange)
+        end
+        for d in dayrange
+            day = base_datetime + Dates.Day(d)
+            # Check to see if date exists in the base data directory, and if not skip to the next day
+            if !isdir(joinpath(workflow["base_data_dir"], Dates.format(day, "YYYYmmdd")))
+                println("No data for $(Dates.format(day, "YYYYmmdd")), skipping...")
+                flush(stdout)
+                continue
+            end
+            max_minute = 1440 - minute_span
+            timerange = 0:minute_span:max_minute
+            if reverse
+                timerange = reverse(timerange)
+            end
+            for t in timerange
+                start_time = base_datetime + Dates.Minute(t)
+                stop_time = start_time + Dates.Minute(minute_span)
+                println("Processing $(Dates.format(start_time, "HHMM"))...")
+                volume_files = process_volume(workflow, start_time, stop_time)
+                append!(processed_files, volume_files)
+            end
+        end
+    elseif length(datetime) == 8
+        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
+        # Process the whole day in minute_span chunks
+        println("Processing one day...")
+        flush(stdout)
+        if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
+            println("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+            flush(stdout)
+            return "not processed due to missing data"
+        end
         max_minute = 1440 - minute_span
         timerange = 0:minute_span:max_minute
         if reverse
@@ -413,6 +448,11 @@ function process_workflow(workflow::SparrowWorkflow)
         hr = datetime[10:11]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr))
         println("Processing one hour...")
+        if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
+            println("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+            flush(stdout)
+            return "not processed due to missing data"
+        end
         flush(stdout)
         max_minute = 60 - minute_span
         timerange = 0:minute_span:max_minute
