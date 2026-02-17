@@ -44,13 +44,17 @@ function main(workflow::SparrowWorkflow, parsed_args)
 
     try
         # Run the workflow
-        run_workflow(workflow, parsed_args)
+        status = run_workflow(workflow, parsed_args)
+        if status
+            println("𓅪 All done with Sparrow workflow!")
+        else
+            println("𓅪 Sparrow workflow failed with errors. Please check the logs for details.")
+        end
     finally
         # Clean up workers
         rmprocs(workers())
     end
 
-    println("𓅪 All done with Sparrow workflow!")
 end
 
 # This makes the module executable

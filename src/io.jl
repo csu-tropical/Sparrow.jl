@@ -10,11 +10,11 @@ function initialize_working_dirs(workflow::SparrowWorkflow, date)
     mkpath(temp_dir)
 
     # This directory holds raw data from the base_data_dir, which may be in SIGMET format or already converted to CfRadial
-    raw_working_dir = joinpath(temp_dir, "raw_data", date)
-    mkpath(raw_working_dir)
-    link_base_data(date, workflow, raw_working_dir, force_reprocess)
+    working_dir = joinpath(temp_dir, "base_data", date)
+    mkpath(working_dir)
+    link_base_data(date, workflow, working_dir, force_reprocess)
 
-    for (step_num, (step_name, step_type)) in enumerate(workflow["steps"])
+    for (step_name, step_type, input_name, archive) in workflow["steps"]
         step_dir = joinpath(temp_dir, step_name, date)
         mkpath(step_dir)
     end
@@ -33,10 +33,9 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
     # Make sure the archive directory exists
     mkpath(archive_dir)
 
-    archive = workflow["archive"]
     force = workflow["force_reprocess"]
-    for (step_num, (step_name, step_type)) in enumerate(workflow["steps"])
-        if archive[step_num].second
+    for (step_name, step_type, input_name, archive) in workflow["steps"]
+        if archive
             step_dir = joinpath(temp_dir, step_name, date)
             step_files = readdir(step_dir; join=true)
             filter!(!isdir,step_files)
@@ -82,9 +81,15 @@ function archive_files(files, archive_dir, force)
         if force
             mv(file, newfile, force=true)
         else
-            mv(file, newfile)
+            try
+                mv(file, newfile)
+            catch e
+                println("Error archiving $file, may need '--force_reprocess' flag: $e")
+                return false
+            end
         end
     end
+    return true
 end
 
 function find_SeaPol_sigmet_data(date, time)

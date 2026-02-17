@@ -81,47 +81,40 @@ function run_workflow(workflow::SparrowWorkflow, parsed_args)
     original_stderr = stderr
 
     # Set up the log files and redirect the output
-    outfile = log_prefix * "_out.log"
-    errfile = log_prefix * "_err.log"
+    outfile = log_prefix * ".log"
     out = open(outfile, "w")
-    err = open(errfile, "w")
     redirect_stdout(out)
-    redirect_stderr(err)
+    redirect_stderr(out)
 
     # Redirect the output on each worker process to a separate log file if more than one worker
     num_workers = length(workers())
     if num_workers > 1
         for i in 1:num_workers
-            local outfile = log_prefix * "_out_$(i).log"
-            local errfile = log_prefix * "_err_$(i).log"
+            local outfile = log_prefix * "_worker_$(i).log"
             wait(save_at(workers()[i], :out, :(open($(outfile), "w"))))
-            wait(save_at(workers()[i], :err, :(open($(errfile), "w"))))
             wait(get_from(workers()[i], :(redirect_stdout(out))))
-            wait(get_from(workers()[i], :(redirect_stderr(err))))
+            wait(get_from(workers()[i], :(redirect_stderr(out))))
         end
     else
         wait(save_at(workers()[1], :out, :(open($(outfile), "w"))))
-        wait(save_at(workers()[1], :err, :(open($(errfile), "w"))))
         wait(get_from(workers()[1], :(redirect_stdout(out))))
-        wait(get_from(workers()[1], :(redirect_stderr(err))))
+        wait(get_from(workers()[1], :(redirect_stderr(out))))
     end
 
     # Run the main processing loop
-    assign_workers(workflow)
+    status = assign_workers(workflow)
 
     # Close the output files
     close(out)
-    close(err)
     for i in 1:num_workers
         wait(get_from(workers()[i], :(close(out))))
-        wait(get_from(workers()[i], :(close(err))))
     end
 
     # Restore original stdout/stderr
     redirect_stdout(original_stdout)
     redirect_stderr(original_stderr)
 
-    return true
+    return status
 end
 
 function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
@@ -187,6 +180,7 @@ function assign_workers(workflow::SparrowWorkflow)
         catch e
             println("Error processing workflow: $e")
             flush(stdout)
+            return false
         end
     else
         # Process realtime loop
@@ -461,9 +455,15 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     temp_dir = initialize_working_dirs(workflow, date)
 
     # Run the workflow steps
-    for (step_num, (step_name, step_type)) in enumerate(workflow["steps"])
-        println("Running step $(step_num): $(step_name)...")
-        flush(stdout)
+    for (step_num, (step_name, step_type, input_name, archive)) in enumerate(workflow["steps"])
+        if archive
+            println("Running archive step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
+            flush(stdout)
+        else
+            println("Running temporary step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
+            flush(stdout)
+        end
+
         run_workflow_step(workflow, step_num, start_time, stop_time, temp_dir)
     end
 
@@ -483,13 +483,8 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
     # Common preprocessing that applies to all workflows
     date = Dates.format(start_time, "YYYYmmdd")
     steps = workflow["steps"]
-    step_name, step_type = steps[step_num]
-    if step_num == 1
-        input_dir = joinpath(temp_dir, "raw_data", date)
-    else step_num > 1
-        prev_step_name, prev_step_type = steps[step_num-1]
-        input_dir = joinpath(temp_dir, prev_step_name, date)
-    end
+    step_name, step_type, input_name, archive = steps[step_num]
+    input_dir = joinpath(temp_dir, input_name, date)
     output_dir = joinpath(temp_dir, step_name, date)
 
     if hasmethod(workflow_step, (typeof(workflow), Type{step_type}, String, String))
