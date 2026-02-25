@@ -39,6 +39,10 @@ function parse_arguments(args)
             help = "File overriding data paths"
             arg_type = String
             default = "none"
+        "--verbose", "-v"
+            help = "Verbosity level (0=errors only, 1=warnings, 2=info, 3=debug, 4=trace)"
+            arg_type = Int
+            default = 2
         "workflow"
             help = "Name of workflow file"
             arg_type = String
@@ -53,14 +57,14 @@ function setup_workers(parsed_args)
     email_flags = email_address != "none" ? "eas" : "n"
 
     if parsed_args["sge"]
-        println("𓅪 Initializing Sparrow on SGE with $(num_workers) workers and $(Threads.nthreads()) threads")
+        msg_info("Initializing Sparrow on SGE with $(num_workers) workers and $(Threads.nthreads()) threads")
         ClusterManagers.addprocs_sge(num_workers;
             qsub_flags=`-q all.q -pe mpi $(num_threads) -m $(email_flags) -M $(email_address)`)
     elseif parsed_args["slurm"]
-        println("𓅪 Initializing Sparrow on Slurm with $(num_workers) workers and $(Threads.nthreads()) threads")
+        msg_info("Initializing Sparrow on Slurm with $(num_workers) workers and $(Threads.nthreads()) threads")
         addprocs(SlurmManager())
     else
-        println("𓅪 Initializing Sparrow locally with $(num_workers) workers and $(Threads.nthreads()) threads")
+        msg_info("Initializing Sparrow locally with $(num_workers) workers and $(Threads.nthreads()) threads")
         addprocs(num_workers)
     end
 

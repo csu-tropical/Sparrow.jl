@@ -20,9 +20,9 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{filterByTimeStep}, inpu
     filter!(!isdir, input_files)
     for input_file in input_files
         scan_start = get_scan_start(file)
-        #println("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
+        msg_debug("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
         if scan_start < start_time || scan_start >= stop_time
-            #println("Skipping $file")
+            msg_debug("Skipping $file")
             continue
         else
             output_file = replace(input_file, input_dir => output_dir)
@@ -46,11 +46,27 @@ function get_scan_start(file)
             parse(Int64, basename(file)[10:11]),
             parse(Int64, basename(file)[13:14]),
             parse(Int64, basename(file)[15:16]))
-    elseif match(r"RAW", basename(file))
+    elseif occursin(r"RAW", basename(file))
         # Assumes P3 files with names like "2TS220918150850.RAWEHHV"
         # Have to use RadxPrint
-        # TBD
+        msg_debug("Parsing RAW file: $(basename(file))")
+        flush(stdout)
+        try
+            cmd_output = readchomp(pipeline(`RadxPrint -meta_only -f $file`, `grep startTimeSecs`))
+            msg_trace("RadxPrint output: '$cmd_output'")
+            flush(stdout)
+            if length(cmd_output) >= 18
+                start_time_secs = DateTime(cmd_output[18:end], dateformat"YYYY/mm/dd HH:MM:SS")
+                return start_time_secs
+            else
+                msg_error("RadxPrint output too short: '$cmd_output'")
+            end
+        catch e
+            msg_warning("Error running RadxPrint on $file: $e")
+            flush(stdout)
+            rethrow(e)
+        end
     else
-        error("Unknown file format for $(basename(file))")
+        msg_error("Unknown file format for $(basename(file))")
     end
 end

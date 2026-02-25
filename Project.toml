@@ -1,7 +1,7 @@
 name = "Sparrow"
 uuid = "e85e9086-995e-43cb-b1fa-761c47980264"
-authors = ["Michael Bell <mmbell@colostate.edu> and contributors"]
 version = "0.1.0"
+authors = ["Michael Bell <mmbell@colostate.edu> and contributors"]
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -15,10 +15,12 @@ DistributedData = "f6a0035f-c5ac-4ad0-b410-ad102ced35df"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Ronin = "905eca60-9fa9-4fb3-8835-f5cd63a3719c"
 SlurmClusterManager = "c82cd089-7bf7-41d7-976b-6b5d413cbe0a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
@@ -33,6 +35,7 @@ DistributedData = "0.2.0"
 FileWatching = "1.11.0"
 GeoMakie = "0.7.16"
 Images = "0.26.2"
+JLD2 = "0.6.3"
 Makie = "0.24.8"
 NCDatasets = "0.14.11"
 Printf = "1.11.0"

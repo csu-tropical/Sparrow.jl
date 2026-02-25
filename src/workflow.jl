@@ -7,7 +7,7 @@ abstract type SparrowWorkflow <: AbstractDict{String,Any} end
 #Base.getindex(p::SparrowWorkflow, key) = getindex(p.params, key)
 function Base.getindex(workflow::SparrowWorkflow, key::String)
     if !haskey(workflow.params, key)
-        error("Required parameter '$key' not found in $(typeof(workflow)). Available parameters: $(sort(collect(keys(workflow.params))))")
+        msg_error("Required parameter '$key' not found in $(typeof(workflow)). Available parameters: $(sort(collect(keys(workflow.params))))")
     end
     return workflow.params[key]
 end
@@ -24,11 +24,11 @@ end
 # Helper version with type assertion
 function get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) where {T}
     if !haskey(workflow.params, key)
-        error("Required parameter '$key' not found in $(typeof(workflow)). Available parameters: $(keys(workflow.params))")
+        msg_error("Required parameter '$key' not found in $(typeof(workflow)). Available parameters: $(keys(workflow.params))")
     end
     value = workflow.params[key]
     if !(value isa T)
-        error("Parameter '$key' has type $(typeof(value)), expected $T")
+        msg_error("Parameter '$key' has type $(typeof(value)), expected $T")
     end
     return value::T
 end
@@ -82,6 +82,7 @@ function run_workflow(workflow::SparrowWorkflow, parsed_args)
 
     # Set up the log files and redirect the output
     outfile = log_prefix * ".log"
+    msg_info("Redirecting workflow output to $outfile...")
     out = open(outfile, "w")
     redirect_stdout(out)
     redirect_stderr(out)
@@ -127,18 +128,18 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     workflow["num_workers"] = num_workers
 
     if parsed_args["realtime"] && parsed_args["datetime"] != "now"
-        error("𓅪 Cannot specify a datetime when running in realtime mode. Please remove the --datetime argument or remove the --realtime flag.")
+        msg_error("Cannot specify a datetime when running in realtime mode. Please remove the --datetime argument or remove the --realtime flag.")
     end
 
     if (haskey(workflow.params, "realtime") && workflow["realtime"]) || parsed_args["realtime"]
-        println("𓅪 Running in realtime mode")
+        msg_info("Running in realtime mode")
         workflow["realtime"] = true
         workflow["datetime"] = "now"
     else
         workflow["realtime"] = false
         datetime = parsed_args["datetime"]
         if haskey(workflow.params, "datetime") && datetime != "now"
-            println("𓅪 Overriding datetime in workflow file with $datetime datetime provided in arguments")
+            msg_info("Overriding datetime in workflow file with $datetime datetime provided in arguments")
         end
         workflow["datetime"] = datetime
 
@@ -147,7 +148,7 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
             workflow["datetime"] = datetime[4:end]
         end
 
-        println("𓅪 Running in archive mode on $(workflow["datetime"])")
+        msg_info("Running in archive mode on $(workflow["datetime"])")
     end
 
     if parsed_args["force_reprocess"]
@@ -168,7 +169,7 @@ end
 # Main function to process radar data
 function assign_workers(workflow::SparrowWorkflow)
 
-    println("Processing data with $(typeof(workflow))...")
+    msg_info("Processing data with $(typeof(workflow))...")
     base_data_dir = workflow["base_data_dir"]
     base_archive_dir = workflow["base_archive_dir"]
 
@@ -178,13 +179,13 @@ function assign_workers(workflow::SparrowWorkflow)
         try
             wait(get_from(workers()[1], :(process_workflow($(workflow)))))
         catch e
-            println("Error processing workflow: $e")
+            msg_warning("Error processing workflow: $e")
             flush(stdout)
             return false
         end
     else
         # Process realtime loop
-        println("Watching for real time data...")
+        msg_info("Watching for real time data...")
         flush(stdout)
         status = "Starting"
         # Allow up to num_workers parallel processes to occur simultaneously
@@ -200,10 +201,10 @@ function assign_workers(workflow::SparrowWorkflow)
             mkpath(raw_dir)
             raw_files = readdir(raw_dir)
             filter!(!isdir, raw_files)
-            #println("Checking for new data at $(now(UTC))...")
+            msg_trace("Checking for new data at $(now(UTC))...")
             #flush(stdout)
             for file in reverse(raw_files)
-                #println("Checking $file...")
+                msg_trace("Checking $file...")
                 #flush(stdout)
                 # Skip if it is hidden file, which means rsync is still writing, or if it is already in the queue
                 if startswith(file, ".")
@@ -212,11 +213,11 @@ function assign_workers(workflow::SparrowWorkflow)
 
                 # Check if the file is already processed
                 if check_processed(workflow, file, base_archive_dir)
-                    #println("$file already processed, skipping...")
+                    msg_trace("$file already processed, skipping...")
                     #flush(stdout)
                     continue
                 elseif (file in filequeue)
-                    #println("$file is in the queue and being processed...")
+                    msg_trace("$file is in the queue and being processed...")
                     #flush(stdout)
                     continue
                 end
@@ -224,7 +225,8 @@ function assign_workers(workflow::SparrowWorkflow)
                 # File is not hidden and has not been processed so try to schedule it
                 if !(file in filequeue)
                     # Found some data to process
-                    println("Current queue: $filequeue")
+                    msg_debug("New file detected: $file")
+                    msg_debug("Current queue: $filequeue")
                     flush(stdout)
                     # Find an open task slot
                     for t in 1:length(tasks)
@@ -232,7 +234,7 @@ function assign_workers(workflow::SparrowWorkflow)
                             # Found an open task slot so start processing
                             filequeue[t] = file
                             tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                            println("$file being processed in empty task slot $t at $(now(UTC))")
+                            msg_info("$file being processed in empty task slot $t at $(now(UTC))")
                             flush(stdout)
                             break
                         elseif isassigned(tasks, t) && filequeue[t] != "none"
@@ -240,29 +242,29 @@ function assign_workers(workflow::SparrowWorkflow)
                             if isready(tasks[t])
                                 try
                                     status = fetch(tasks[t])
-                                    println("Task $t $status at $(now(UTC))")
+                                    msg_info("Task $t $status at $(now(UTC))")
                                 catch e
-                                    println("Task $t errored: $e at $(now(UTC))")
+                                    msg_warning("Task $t errored: $e at $(now(UTC))")
                                 end
                                 flush(stdout)
                                 filequeue[t] = file
                                 tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                                println("$file took over task slot $t at $(now(UTC))")
+                                msg_info("$file took over task slot $t at $(now(UTC))")
                                 flush(stdout)
                                 break
                             elseif check_processed(workflow, filequeue[t], base_archive_dir)
                                 # Check if the previous task is done processing, and if so clear it from the filequeue and assign new file
-                                println("Clearing task $t at $(now(UTC))")
+                                msg_info("Clearing task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
                                 catch e
-                                    println("Error $e fetching task $t status at $(now(UTC))")
+                                    msg_warning("Error $e fetching task $t status at $(now(UTC))")
                                     flush(stdout)
                                 end
-                                println("Task $t $status at $(now(UTC))")
+                                msg_info("Task $t $status at $(now(UTC))")
                                 filequeue[t] = file
                                 tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                                println("$file took over task slot $t at $(now(UTC))")
+                                msg_info("$file took over task slot $t at $(now(UTC))")
                                 flush(stdout)
                                 break
                             end
@@ -273,13 +275,13 @@ function assign_workers(workflow::SparrowWorkflow)
                 # Check if the file was successfully queued or queue is full
                 if !(file in filequeue)
                     # Queue is full, wait for the first task to finish
-                    println("Queue full, waiting to schedule $file")
+                    msg_info("Queue full, waiting to schedule $file")
                     flush(stdout)
                     free_task = -1
                     waiting_time = 0
                     while free_task == -1 && waiting_time < 600
                         if waiting_time % 60 == 0
-                            println("Waited $waiting_time seconds...")
+                            msg_info("Waited $waiting_time seconds...")
                             flush(stdout)
                         end
                         for t in 1:length(tasks)
@@ -287,23 +289,23 @@ function assign_workers(workflow::SparrowWorkflow)
                             if isready(tasks[t])
                                 try
                                     status = fetch(tasks[t])
-                                    println("Task $t completed: $status at $(now(UTC))")
+                                    msg_info("Task $t completed: $status at $(now(UTC))")
                                 catch e
-                                    println("Task $t errored: $e at $(now(UTC))")
+                                    msg_warning("Task $t errored: $e at $(now(UTC))")
                                 end
                                 flush(stdout)
                                 filequeue[t] = file
                                 free_task = t
                                 break
                             elseif check_processed(workflow, filequeue[t], base_archive_dir)
-                                println("Fetching status on task $t at $(now(UTC))")
+                                msg_info("Fetching status on task $t at $(now(UTC))")
                                 try
                                     status = fetch(tasks[t])
                                 catch e
-                                    println("Error $e fetching task $t at $(now(UTC))")
+                                    msg_warning("Error $e fetching task $t at $(now(UTC))")
                                     flush(stdout)
                                 end
-                                println("Task $t $status at $(now(UTC))")
+                                msg_info("Task $t $status at $(now(UTC))")
                                 flush(stdout)
                                 filequeue[t] = file
                                 free_task = t
@@ -318,10 +320,10 @@ function assign_workers(workflow::SparrowWorkflow)
                     end
                     if free_task != -1
                         tasks[free_task] = get_from(workers()[free_task], :(process_workflow($(workflow))))
-                        println("Task slot $free_task opened up for $file at $(now(UTC)), processing...")
+                        msg_info("Task slot $free_task opened up for $file at $(now(UTC)), processing...")
                         break
                     else
-                        println("No task slots opened up in 10 minutes! Skipping $file and moving on")
+                        msg_warning("No task slots opened up in 10 minutes! Skipping $file and moving on")
                     end
                 end
             end
@@ -336,25 +338,25 @@ function assign_workers(workflow::SparrowWorkflow)
                 if isready(tasks[t])
                     try
                         status = fetch(tasks[t])
-                        println("Task $t completed with status: $status at $(now(UTC))")
+                        msg_info("Task $t completed with status: $status at $(now(UTC))")
                         flush(stdout)
                     catch e
-                        println("Task $t errored: $e at $(now(UTC))")
+                        msg_warning("Task $t errored: $e at $(now(UTC))")
                         flush(stdout)
                     end
                     # Either way, clear the slot
                     filequeue[t] = "none"
                 elseif check_processed(workflow, filequeue[t], base_archive_dir)
                     # Task isn't ready yet but file shows as processed
-                    println("Fetching status on task $t at $(now(UTC))")
+                    msg_info("Fetching status on task $t at $(now(UTC))")
                     flush(stdout)
                     try
                         status = fetch(tasks[t])
                     catch e
-                        println("Error $e fetching task $t at $(now(UTC))")
+                        msg_warning("Error $e fetching task $t at $(now(UTC))")
                         flush(stdout)
                     end
-                    println("Task $t $status at $(now(UTC))")
+                    msg_info("Task $t $status at $(now(UTC))")
                     flush(stdout)
                     filequeue[t] = "none"
                 end
@@ -383,7 +385,7 @@ function process_workflow(workflow::SparrowWorkflow)
     end
 
     if length(datetime) < 8
-        error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
+        msg_error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
     end
 
     date = datetime[1:8] #YYYYmmdd
@@ -392,10 +394,11 @@ function process_workflow(workflow::SparrowWorkflow)
     day = datetime[7:8]
 
     processed_files = []
+    archived_files = []
     if length(datetime) == 6
         # Process a whole month
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
-        println("Processing one month...")
+        msg_info("Processing one month...")
         flush(stdout)
         dayrange = 0:30
         if reverse
@@ -405,7 +408,7 @@ function process_workflow(workflow::SparrowWorkflow)
             day = base_datetime + Dates.Day(d)
             # Check to see if date exists in the base data directory, and if not skip to the next day
             if !isdir(joinpath(workflow["base_data_dir"], Dates.format(day, "YYYYmmdd")))
-                println("No data for $(Dates.format(day, "YYYYmmdd")), skipping...")
+                msg_info("No data for $(Dates.format(day, "YYYYmmdd")), skipping...")
                 flush(stdout)
                 continue
             end
@@ -417,18 +420,19 @@ function process_workflow(workflow::SparrowWorkflow)
             for t in timerange
                 start_time = base_datetime + Dates.Minute(t)
                 stop_time = start_time + Dates.Minute(minute_span)
-                println("Processing $(Dates.format(start_time, "HHMM"))...")
-                volume_files = process_volume(workflow, start_time, stop_time)
-                append!(processed_files, volume_files)
+                msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
+                processed, archived = process_volume(workflow, start_time, stop_time)
+                append!(processed_files, processed)
+                append!(archived_files, archived)
             end
         end
     elseif length(datetime) == 8
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
         # Process the whole day in minute_span chunks
-        println("Processing one day...")
+        msg_info("Processing one day...")
         flush(stdout)
         if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
-            println("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+            msg_info("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
             flush(stdout)
             return "not processed due to missing data"
         end
@@ -440,16 +444,17 @@ function process_workflow(workflow::SparrowWorkflow)
         for t in timerange
             start_time = base_datetime + Dates.Minute(t)
             stop_time = start_time + Dates.Minute(minute_span)
-            println("Processing $(Dates.format(start_time, "HHMM"))...")
-            volume_files = process_volume(workflow, start_time, stop_time)
-            append!(processed_files, volume_files)
+            msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
+            processed, archived = process_volume(workflow, start_time, stop_time)
+            append!(processed_files, processed)
+            append!(archived_files, archived)
         end
     elseif length(datetime) == 11
         hr = datetime[10:11]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr))
-        println("Processing one hour...")
+        msg_info("Processing one hour...")
         if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
-            println("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+            msg_info("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
             flush(stdout)
             return "not processed due to missing data"
         end
@@ -462,22 +467,27 @@ function process_workflow(workflow::SparrowWorkflow)
         for t in timerange
             start_time = base_datetime + Dates.Minute(t)
             stop_time = start_time + Dates.Minute(minute_span)
-            println("Processing $(Dates.format(start_time, "HHMM"))...")
-            volume_files = process_volume(workflow, start_time, stop_time)
-            append!(processed_files, volume_files)
+            msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
+            processed, archived = process_volume(workflow, start_time, stop_time)
+            append!(processed_files, processed)
+            append!(archived_files, archived)
         end
     else
         hr = datetime[10:11]
         min = datetime[12:13]
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
         stop_time = start_time + Dates.Minute(minute_span)
-        println("Processing $(Dates.format(start_time, "HHMM"))...")
-        processed_files = process_volume(workflow, start_time, stop_time)
+        msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
+        processed_files, archived_files = process_volume(workflow, start_time, stop_time)
     end
 
     # Mark files as processed by touching a hidden file in the archive directory
     mkpath(base_archive_dir * "/.sparrow/")
     for file in processed_files
+        hidden_file = "$(base_archive_dir)/.sparrow/$(typeof(workflow))_$(basename(file))"
+        touch(hidden_file)
+    end
+    for file in archived_files
         hidden_file = "$(base_archive_dir)/.sparrow/$(typeof(workflow))_$(basename(file))"
         touch(hidden_file)
     end
@@ -494,13 +504,21 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     # Set up the working directories
     temp_dir = initialize_working_dirs(workflow, date)
 
+    # Check the input files to see if they fall between start and stop time
+    base_data_dir = joinpath(workflow["base_data_dir"], date)
+    input_files = readdir(base_data_dir; join=true)
+    filter!(!isdir,input_files)
+    if !workflow["process_all"]
+        input_files = filter(file -> get_scan_start(file) >= start_time && get_scan_start(file) < stop_time, input_files)
+    end
+
     # Run the workflow steps
     for (step_num, (step_name, step_type, input_name, archive)) in enumerate(workflow["steps"])
         if archive
-            println("Running archive step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
+            msg_info("Running archive step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
             flush(stdout)
         else
-            println("Running temporary step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
+            msg_info("Running temporary step $(step_num): $(step_name) using $(step_type) from $(input_name)...")
             flush(stdout)
         end
 
@@ -513,8 +531,9 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     # Remove the temporary directories
     rm(temp_dir, recursive=true)
 
-    return processed_files
-
+    msg_info("Completed $(typeof(workflow)) workflow from $(start_time) to $(stop_time) with $(length(input_files)) input files and $(length(processed_files)) processed, archived files.")
+    flush(stdout)
+    return input_files, processed_files
 end
 
 # Main QC workflow dispatcher - takes a workflow type as argument
@@ -528,18 +547,21 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
     output_dir = joinpath(temp_dir, step_name, date)
 
     if hasmethod(workflow_step, (typeof(workflow), Type{step_type}, String, String))
-        println("Running $(typeof(workflow)) workflow step $(step_num): $(step_name)")
+        msg_info("Running $(typeof(workflow)) workflow step $(step_num): $(step_name)")
         flush(stdout)
         workflow_step(workflow, step_type, input_dir, output_dir;
                      step_name=step_name, step_num=step_num, start_time=start_time, stop_time=stop_time)
     elseif hasmethod(workflow_step, (workflow::SparrowWorkflow, Type{step_type}, String, String))
-        println("Running Sparrow provided step $(step_num): $(step_name)")
+        msg_info("Running Sparrow provided step $(step_num): $(step_name)")
         flush(stdout)
         workflow_step(workflow, step_type, input_dir, output_dir;
                      step_name=step_name, step_num=step_num, start_time=start_time, stop_time=stop_time)
     else
-        error("Workflow step $(step_name) is not implemented by $(typeof(workflow)) or Sparrow provided functions. Please implement workflow_step(workflow::$(typeof(workflow)), step_type::$(step_type), input_dir::String, output_dir::String) to run this workflow step.")
+        msg_error("Workflow step $(step_name) is not implemented by $(typeof(workflow)) or Sparrow provided functions. Please implement workflow_step(workflow::$(typeof(workflow)), step_type::$(step_type), input_dir::String, output_dir::String) to run this workflow step.")
     end
+    msg_info("Completed step $(step_num): $(step_name)")
+    flush(stdout)
+    return true
 end
 
 function check_processed(workflow::SparrowWorkflow, file::String, archive_dir::String)
