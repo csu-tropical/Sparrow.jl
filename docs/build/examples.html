@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · Sparrow.jl</title><meta name="title" content="Examples · Sparrow.jl"/><meta property="og:title" content="Examples · Sparrow.jl"/><meta property="twitter:title" content="Examples · Sparrow.jl"/><meta name="description" content="Documentation for Sparrow.jl."/><meta property="og:description" content="Documentation for Sparrow.jl."/><meta property="twitter:description" content="Documentation for Sparrow.jl."/><meta property="og:url" content="https://mmbell.github.io/Sparrow.jl/examples.html"/><meta property="twitter:url" content="https://mmbell.github.io/Sparrow.jl/examples.html"/><link rel="canonical" href="https://mmbell.github.io/Sparrow.jl/examples.html"/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="index.html">Sparrow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="index.html">Home</a></li><li><a class="tocitem" href="getting_started.html">Getting Started</a></li><li><a class="tocitem" href="workflow_guide.html">Workflow Guide</a></li><li><a class="tocitem" href="provided_steps.html">Provided Workflow Steps</a></li><li class="is-active"><a class="tocitem" href="examples.html">Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-Basic-Radar-Quality-Control-Workflow"><span>Example 1: Basic Radar Quality Control Workflow</span></a></li><li><a class="tocitem" href="#Example-2:-Multi-Radar-Merge-Workflow"><span>Example 2: Multi-Radar Merge Workflow</span></a></li><li><a class="tocitem" href="#Example-3:-Continuous-Monitoring-Workflow"><span>Example 3: Continuous Monitoring Workflow</span></a></li><li><a class="tocitem" href="#Example-4:-Research-Data-Processing-Pipeline"><span>Example 4: Research Data Processing Pipeline</span></a></li><li><a class="tocitem" href="#Tips-for-Writing-Workflows"><span>Tips for Writing Workflows</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="api.html">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href="examples.html">Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href="examples.html">Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/mmbell/Sparrow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/mmbell/Sparrow.jl/blob/main/docs/src/examples.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This page provides complete, practical examples of Sparrow workflows for common use cases.</p><h2 id="Example-1:-Basic-Radar-Quality-Control-Workflow"><a class="docs-heading-anchor" href="#Example-1:-Basic-Radar-Quality-Control-Workflow">Example 1: Basic Radar Quality Control Workflow</a><a id="Example-1:-Basic-Radar-Quality-Control-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Basic-Radar-Quality-Control-Workflow" title="Permalink"></a></h2><p>This example demonstrates a simple workflow that converts raw radar data and applies quality control.</p><pre><code class="language-julia hljs">using Sparrow
+
+# Define the workflow type
+@workflow_type RadarQCWorkflow
+
+# Define processing steps
+@workflow_step ConvertToNetCDF
+@workflow_step RemoveClutter
+@workflow_step FlagSuspiciousData
+
+# Create the workflow instance
+workflow = RadarQCWorkflow(
+    # Required directories
+    base_working_dir = &quot;/tmp/radar_qc&quot;,
+    base_archive_dir = &quot;/data/processed/qc&quot;,
+    base_data_dir = &quot;/data/raw/radar&quot;,
+    base_plot_dir = &quot;/data/plots&quot;,
+    
+    # Processing parameters
+    minute_span = 10,
+    reverse = false,
+    
+    # Define the processing pipeline
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;convert&quot;, ConvertToNetCDF, &quot;base_data&quot;, false),
+        (&quot;declutter&quot;, RemoveClutter, &quot;convert&quot;, false),
+        (&quot;flag&quot;, FlagSuspiciousData, &quot;declutter&quot;, true)
+    ],
+    
+    # Radar configuration
+    raw_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;, &quot;WIDTH&quot;, &quot;ZDR&quot;, &quot;PHIDP&quot;],
+    qc_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;, &quot;WIDTH&quot;],
+    
+    # QC thresholds
+    dbz_min = -10.0,
+    dbz_max = 70.0,
+    vel_max = 30.0,
+    
+    message_level = 2
+)
+
+# Step 1: Convert raw data to NetCDF
+function Sparrow.workflow_step(workflow::RadarQCWorkflow, ::Type{ConvertToNetCDF},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Converting raw radar files to NetCDF format&quot;)
+    mkpath(output_dir)
+    
+    # Find raw files
+    raw_files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.raw&quot;) || endswith(f, &quot;.uf&quot;), raw_files)
+    
+    for raw_file in raw_files
+        output_file = joinpath(output_dir, basename(raw_file) * &quot;.nc&quot;)
+        
+        # Use RadxConvert to convert to CF-Radial format
+        cmd = `RadxConvert -f $(raw_file) -outdir $(output_dir) -outformat cfradial`
+        run(cmd)
+        
+        msg_debug(&quot;Converted $(basename(raw_file))&quot;)
+    end
+    
+    return length(raw_files)
+end
+
+# Step 2: Remove ground clutter
+function Sparrow.workflow_step(workflow::RadarQCWorkflow, ::Type{RemoveClutter},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Removing ground clutter from radar data&quot;)
+    mkpath(output_dir)
+    
+    using NCDatasets
+    
+    netcdf_files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), netcdf_files)
+    
+    for nc_file in netcdf_files
+        output_file = joinpath(output_dir, basename(nc_file))
+        
+        # Simple clutter removal based on velocity texture
+        Dataset(nc_file, &quot;r&quot;) do ds_in
+            Dataset(output_file, &quot;c&quot;) do ds_out
+                # Copy dimensions and variables
+                for (dimname, dim) in ds_in.dim
+                    defDim(ds_out, dimname, length(dim))
+                end
+                
+                # Process reflectivity with clutter filter
+                if haskey(ds_in, &quot;DBZ&quot;)
+                    dbz = ds_in[&quot;DBZ&quot;][:]
+                    vel = ds_in[&quot;VEL&quot;][:]
+                    
+                    # Flag low velocity variance as clutter
+                    dbz[abs.(vel) .&lt; 0.5] .= NaN
+                    
+                    defVar(ds_out, &quot;DBZ&quot;, dbz, (&quot;time&quot;, &quot;range&quot;, &quot;azimuth&quot;))
+                end
+            end
+        end
+        
+        msg_debug(&quot;Decluttered $(basename(nc_file))&quot;)
+    end
+    
+    return length(netcdf_files)
+end
+
+# Step 3: Flag suspicious data
+function Sparrow.workflow_step(workflow::RadarQCWorkflow, ::Type{FlagSuspiciousData},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Flagging suspicious data values&quot;)
+    mkpath(output_dir)
+    
+    dbz_min = get_param(workflow, &quot;dbz_min&quot;, -10.0)
+    dbz_max = get_param(workflow, &quot;dbz_max&quot;, 70.0)
+    vel_max = get_param(workflow, &quot;vel_max&quot;, 30.0)
+    
+    using NCDatasets
+    
+    nc_files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), nc_files)
+    
+    flagged_count = 0
+    for nc_file in nc_files
+        output_file = joinpath(output_dir, basename(nc_file))
+        cp(nc_file, output_file; force=true)
+        
+        Dataset(output_file, &quot;a&quot;) do ds
+            # Flag out-of-range reflectivity
+            if haskey(ds, &quot;DBZ&quot;)
+                dbz = ds[&quot;DBZ&quot;][:]
+                mask = (dbz .&lt; dbz_min) .| (dbz .&gt; dbz_max)
+                if any(mask)
+                    dbz[mask] .= NaN
+                    ds[&quot;DBZ&quot;][:] = dbz
+                    flagged_count += sum(mask)
+                end
+            end
+            
+            # Flag unrealistic velocities
+            if haskey(ds, &quot;VEL&quot;)
+                vel = ds[&quot;VEL&quot;][:]
+                mask = abs.(vel) .&gt; vel_max
+                if any(mask)
+                    vel[mask] .= NaN
+                    ds[&quot;VEL&quot;][:] = vel
+                    flagged_count += sum(mask)
+                end
+            end
+        end
+    end
+    
+    msg_info(&quot;Flagged $(flagged_count) suspicious data points&quot;)
+    return length(nc_files)
+end</code></pre><p>Run this workflow with:</p><pre><code class="language-bash hljs">julia sparrow radar_qc_workflow.jl --datetime 20240115_000000 --num_workers 4</code></pre><h2 id="Example-2:-Multi-Radar-Merge-Workflow"><a class="docs-heading-anchor" href="#Example-2:-Multi-Radar-Merge-Workflow">Example 2: Multi-Radar Merge Workflow</a><a id="Example-2:-Multi-Radar-Merge-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Multi-Radar-Merge-Workflow" title="Permalink"></a></h2><p>This example merges data from multiple radar sources into a common grid.</p><pre><code class="language-julia hljs">using Sparrow
+
+@workflow_type MultiRadarMerge
+
+@workflow_step CollectRadarData
+@workflow_step GridEachRadar
+@workflow_step MergeGrids
+@workflow_step CreateComposite
+
+workflow = MultiRadarMerge(
+    base_working_dir = &quot;/tmp/merge&quot;,
+    base_archive_dir = &quot;/data/merged&quot;,
+    base_data_dir = &quot;/data/radars&quot;,
+    base_plot_dir = &quot;/plots/composites&quot;,
+    
+    minute_span = 5,
+    
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;collect&quot;, CollectRadarData, &quot;base_data&quot;, false),
+        (&quot;grid&quot;, GridEachRadar, &quot;collect&quot;, false),
+        (&quot;merge&quot;, MergeGrids, &quot;grid&quot;, false),
+        (&quot;composite&quot;, CreateComposite, &quot;merge&quot;, true)
+    ],
+    
+    # Radar sites
+    radar_sites = [&quot;SITE1&quot;, &quot;SITE2&quot;, &quot;SITE3&quot;],
+    
+    # Grid specification
+    grid_nx = 400,
+    grid_ny = 400,
+    grid_dx = 1000.0,  # 1 km
+    grid_dy = 1000.0,
+    grid_origin_lat = 40.0,
+    grid_origin_lon = -105.0,
+    
+    raw_moment_names = [&quot;DBZ&quot;],
+    qc_moment_names = [&quot;DBZ&quot;],
+    
+    message_level = 2
+)
+
+function Sparrow.workflow_step(workflow::MultiRadarMerge, ::Type{CollectRadarData},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Collecting data from multiple radar sites&quot;)
+    mkpath(output_dir)
+    
+    sites = get_param(workflow, &quot;radar_sites&quot;, Vector{String})
+    base_dir = workflow[&quot;base_data_dir&quot;]
+    
+    collected = 0
+    for site in sites
+        site_dir = joinpath(base_dir, site)
+        if !isdir(site_dir)
+            msg_warning(&quot;Radar site directory not found: $(site_dir)&quot;)
+            continue
+        end
+        
+        # Copy files from each site to output
+        for file in readdir(site_dir; join=true)
+            if endswith(file, &quot;.nc&quot;)
+                dest = joinpath(output_dir, &quot;$(site)_$(basename(file))&quot;)
+                cp(file, dest; force=true)
+                collected += 1
+            end
+        end
+    end
+    
+    msg_info(&quot;Collected $(collected) files from $(length(sites)) radar sites&quot;)
+    return collected
+end
+
+function Sparrow.workflow_step(workflow::MultiRadarMerge, ::Type{GridEachRadar},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Gridding each radar to common grid&quot;)
+    mkpath(output_dir)
+    
+    nx = workflow[&quot;grid_nx&quot;]
+    ny = workflow[&quot;grid_ny&quot;]
+    dx = workflow[&quot;grid_dx&quot;]
+    dy = workflow[&quot;grid_dy&quot;]
+    
+    files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), files)
+    
+    for file in files
+        # Grid this radar file
+        output_file = joinpath(output_dir, basename(file))
+        
+        # Call gridding function (simplified)
+        grid_radar_to_cartesian(file, output_file, nx, ny, dx, dy)
+        
+        msg_debug(&quot;Gridded $(basename(file))&quot;)
+    end
+    
+    return length(files)
+end
+
+function Sparrow.workflow_step(workflow::MultiRadarMerge, ::Type{MergeGrids},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Merging grids from all radars&quot;)
+    mkpath(output_dir)
+    
+    gridded_files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), gridded_files)
+    
+    if isempty(gridded_files)
+        msg_warning(&quot;No gridded files to merge&quot;)
+        return 0
+    end
+    
+    # Create merged grid (simplified - would use proper weighted averaging)
+    output_file = joinpath(output_dir, &quot;merged_composite.nc&quot;)
+    
+    # Load all grids and merge
+    using NCDatasets
+    
+    all_dbz = []
+    for file in gridded_files
+        Dataset(file, &quot;r&quot;) do ds
+            push!(all_dbz, ds[&quot;DBZ&quot;][:])
+        end
+    end
+    
+    # Simple maximum merge
+    merged_dbz = maximum(cat(all_dbz...; dims=4); dims=4)[:,:,:,1]
+    
+    # Save merged grid
+    Dataset(output_file, &quot;c&quot;) do ds
+        defDim(ds, &quot;x&quot;, size(merged_dbz, 1))
+        defDim(ds, &quot;y&quot;, size(merged_dbz, 2))
+        defDim(ds, &quot;z&quot;, size(merged_dbz, 3))
+        defVar(ds, &quot;DBZ&quot;, merged_dbz, (&quot;x&quot;, &quot;y&quot;, &quot;z&quot;))
+    end
+    
+    msg_info(&quot;Merged $(length(gridded_files)) radar grids&quot;)
+    return 1
+end
+
+function Sparrow.workflow_step(workflow::MultiRadarMerge, ::Type{CreateComposite},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Creating composite visualization&quot;)
+    mkpath(output_dir)
+    
+    # Find merged file
+    merged_file = joinpath(input_dir, &quot;merged_composite.nc&quot;)
+    if !isfile(merged_file)
+        msg_error(&quot;Merged file not found: $(merged_file)&quot;)
+        return 0
+    end
+    
+    using NCDatasets, CairoMakie
+    
+    Dataset(merged_file, &quot;r&quot;) do ds
+        dbz = ds[&quot;DBZ&quot;][:,:,1]  # Get lowest level
+        
+        # Create plot
+        fig = Figure(resolution=(800, 600))
+        ax = Axis(fig[1, 1], title=&quot;Multi-Radar Composite&quot;)
+        
+        hm = heatmap!(ax, dbz&#39;, colormap=:viridis, colorrange=(-10, 60))
+        Colorbar(fig[1, 2], hm, label=&quot;Reflectivity (dBZ)&quot;)
+        
+        output_plot = joinpath(output_dir, &quot;composite.png&quot;)
+        save(output_plot, fig)
+        
+        msg_info(&quot;Created composite plot: $(output_plot)&quot;)
+    end
+    
+    return 1
+end
+
+# Helper function (would be in separate file)
+function grid_radar_to_cartesian(input_file, output_file, nx, ny, dx, dy)
+    # Simplified gridding - in practice would use proper interpolation
+    msg_debug(&quot;Gridding $(basename(input_file))&quot;)
+    cp(input_file, output_file; force=true)
+end</code></pre><h2 id="Example-3:-Continuous-Monitoring-Workflow"><a class="docs-heading-anchor" href="#Example-3:-Continuous-Monitoring-Workflow">Example 3: Continuous Monitoring Workflow</a><a id="Example-3:-Continuous-Monitoring-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Continuous-Monitoring-Workflow" title="Permalink"></a></h2><p>This example demonstrates a workflow that continuously monitors for new files and processes them.</p><pre><code class="language-julia hljs">using Sparrow
+
+@workflow_type ContinuousMonitor
+
+@workflow_step WatchForFiles
+@workflow_step QuickQC
+@workflow_step GenerateAlert
+
+workflow = ContinuousMonitor(
+    base_working_dir = &quot;/tmp/monitor&quot;,
+    base_archive_dir = &quot;/data/archive/monitor&quot;,
+    base_data_dir = &quot;/data/incoming&quot;,
+    base_plot_dir = &quot;/data/alerts&quot;,
+    
+    minute_span = 1,  # Check every minute
+    
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;watch&quot;, WatchForFiles, &quot;base_data&quot;, false),
+        (&quot;qc&quot;, QuickQC, &quot;watch&quot;, false),
+        (&quot;alert&quot;, GenerateAlert, &quot;qc&quot;, true)
+    ],
+    
+    # Monitoring parameters
+    watch_pattern = r&quot;.*\.nc$&quot;,
+    alert_threshold_dbz = 50.0,
+    alert_email = &quot;radar@example.com&quot;,
+    
+    raw_moment_names = [&quot;DBZ&quot;],
+    qc_moment_names = [&quot;DBZ&quot;],
+    
+    message_level = 3  # Debug level for monitoring
+)
+
+function Sparrow.workflow_step(workflow::ContinuousMonitor, ::Type{WatchForFiles},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_debug(&quot;Watching for new files in $(input_dir)&quot;)
+    mkpath(output_dir)
+    
+    pattern = get_param(workflow, &quot;watch_pattern&quot;, r&quot;.*\.nc$&quot;)
+    
+    # Find new files
+    files = readdir(input_dir; join=true)
+    filter!(f -&gt; occursin(pattern, basename(f)), files)
+    filter!(isfile, files)
+    
+    # Copy new files to processing directory
+    for file in files
+        dest = joinpath(output_dir, basename(file))
+        if !isfile(dest)
+            cp(file, dest)
+            msg_info(&quot;New file detected: $(basename(file))&quot;)
+        end
+    end
+    
+    return length(files)
+end
+
+function Sparrow.workflow_step(workflow::ContinuousMonitor, ::Type{QuickQC},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_debug(&quot;Performing quick QC on new files&quot;)
+    mkpath(output_dir)
+    
+    using NCDatasets
+    
+    files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), files)
+    
+    for file in files
+        output_file = joinpath(output_dir, basename(file))
+        
+        # Quick QC: check for valid data
+        Dataset(file, &quot;r&quot;) do ds
+            if haskey(ds, &quot;DBZ&quot;)
+                dbz = ds[&quot;DBZ&quot;][:]
+                
+                # Basic checks
+                valid_data = !all(isnan.(dbz))
+                reasonable_range = all(dbz[.!isnan.(dbz)] .&lt; 100.0)
+                
+                if valid_data &amp;&amp; reasonable_range
+                    cp(file, output_file; force=true)
+                    msg_debug(&quot;QC passed: $(basename(file))&quot;)
+                else
+                    msg_warning(&quot;QC failed: $(basename(file))&quot;)
+                end
+            end
+        end
+    end
+    
+    return length(readdir(output_dir))
+end
+
+function Sparrow.workflow_step(workflow::ContinuousMonitor, ::Type{GenerateAlert},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_debug(&quot;Checking for alert conditions&quot;)
+    mkpath(output_dir)
+    
+    threshold = get_param(workflow, &quot;alert_threshold_dbz&quot;, 50.0)
+    
+    using NCDatasets
+    
+    files = readdir(input_dir; join=true)
+    filter!(f -&gt; endswith(f, &quot;.nc&quot;), files)
+    
+    alerts_generated = 0
+    for file in files
+        Dataset(file, &quot;r&quot;) do ds
+            if haskey(ds, &quot;DBZ&quot;)
+                dbz = ds[&quot;DBZ&quot;][:]
+                max_dbz = maximum(filter(!isnan, dbz))
+                
+                if max_dbz &gt;= threshold
+                    msg_warning(&quot;ALERT: High reflectivity detected: $(max_dbz) dBZ in $(basename(file))&quot;)
+                    
+                    # Generate alert file
+                    alert_file = joinpath(output_dir, &quot;alert_$(basename(file)).txt&quot;)
+                    open(alert_file, &quot;w&quot;) do io
+                        println(io, &quot;Alert generated at $(now())&quot;)
+                        println(io, &quot;File: $(basename(file))&quot;)
+                        println(io, &quot;Max reflectivity: $(max_dbz) dBZ&quot;)
+                        println(io, &quot;Threshold: $(threshold) dBZ&quot;)
+                    end
+                    
+                    alerts_generated += 1
+                end
+            end
+        end
+    end
+    
+    if alerts_generated &gt; 0
+        msg_warning(&quot;Generated $(alerts_generated) alerts&quot;)
+    end
+    
+    return alerts_generated
+end</code></pre><p>Run this in continuous mode:</p><pre><code class="language-bash hljs"># Process data as it arrives
+while true; do
+    julia sparrow monitor_workflow.jl --datetime now -v 3
+    sleep 60
+done</code></pre><h2 id="Example-4:-Research-Data-Processing-Pipeline"><a class="docs-heading-anchor" href="#Example-4:-Research-Data-Processing-Pipeline">Example 4: Research Data Processing Pipeline</a><a id="Example-4:-Research-Data-Processing-Pipeline-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-Research-Data-Processing-Pipeline" title="Permalink"></a></h2><p>A complete pipeline for research applications with visualization.</p><pre><code class="language-julia hljs">using Sparrow
+
+@workflow_type ResearchPipeline
+
+@workflow_step QualityControl
+@workflow_step DopplerDealiasing
+@workflow_step AttentuationCorrection
+@workflow_step GridData
+@workflow_step CalculateDerivedProducts
+@workflow_step CreateVisualizations
+
+workflow = ResearchPipeline(
+    base_working_dir = &quot;/scratch/research&quot;,
+    base_archive_dir = &quot;/data/research/processed&quot;,
+    base_data_dir = &quot;/data/research/raw&quot;,
+    base_plot_dir = &quot;/data/research/figures&quot;,
+    
+    minute_span = 5,
+    
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;qc&quot;, QualityControl, &quot;base_data&quot;, false),
+        (&quot;dealias&quot;, DopplerDealiasing, &quot;qc&quot;, false),
+        (&quot;atten&quot;, AttentuationCorrection, &quot;dealias&quot;, false),
+        (&quot;grid&quot;, GridData, &quot;atten&quot;, false),
+        (&quot;derived&quot;, CalculateDerivedProducts, &quot;grid&quot;, false),
+        (&quot;visualize&quot;, CreateVisualizations, &quot;derived&quot;, true)
+    ],
+    
+    raw_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;, &quot;WIDTH&quot;, &quot;ZDR&quot;, &quot;KDP&quot;, &quot;PHIDP&quot;, &quot;RHOHV&quot;],
+    qc_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;, &quot;WIDTH&quot;, &quot;ZDR&quot;, &quot;KDP&quot;, &quot;RHOHV&quot;],
+    
+    # Grid parameters
+    grid_nx = 500,
+    grid_ny = 500,
+    grid_nz = 30,
+    grid_dx = 500.0,
+    grid_dy = 500.0,
+    grid_dz = 250.0,
+    
+    # Analysis parameters
+    calculate_rainfall = true,
+    calculate_hydrometeor_id = true,
+    
+    message_level = 2
+)
+
+# Implement each step as needed...
+# (Similar to previous examples)</code></pre><h2 id="Tips-for-Writing-Workflows"><a class="docs-heading-anchor" href="#Tips-for-Writing-Workflows">Tips for Writing Workflows</a><a id="Tips-for-Writing-Workflows-1"></a><a class="docs-heading-anchor-permalink" href="#Tips-for-Writing-Workflows" title="Permalink"></a></h2><ol><li><strong>Start Simple</strong>: Begin with a minimal workflow and add complexity incrementally</li><li><strong>Test Each Step</strong>: Verify each step works independently before chaining</li><li><strong>Use Fixtures</strong>: Create small test datasets for development</li><li><strong>Log Liberally</strong>: Use debug/trace messages during development</li><li><strong>Handle Errors</strong>: Always wrap risky operations in try-catch blocks</li><li><strong>Document Parameters</strong>: Comment what each workflow parameter does</li><li><strong>Modularize</strong>: Extract common operations into helper functions</li><li><strong>Version Control</strong>: Keep workflow files in git for reproducibility</li></ol><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="workflow_guide.html">Workflow Guide</a> - Detailed workflow concepts</li><li><a href="api.html">API Reference</a> - Function documentation</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="provided_steps.html">« Provided Workflow Steps</a><a class="docs-footer-nextpage" href="api.html">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 24 February 2026 23:14">Tuesday 24 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

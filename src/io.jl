@@ -112,21 +112,93 @@ function find_SeaPol_sigmet_data(date)
     end
 end
 
-# Message severity levels
-const MSG_ERROR = 0      # Fatal error - halt program
-const MSG_WARNING = 1    # Catchable error - continue
-const MSG_INFO = 2       # Informational
-const MSG_DEBUG = 3      # Debugging details
-const MSG_TRACE = 4      # Verbose trace info
+"""
+    MSG_ERROR
+
+Message severity level 0: Fatal errors that halt program execution.
+"""
+const MSG_ERROR = 0
+
+"""
+    MSG_WARNING
+
+Message severity level 1: Warnings for non-fatal issues.
+"""
+const MSG_WARNING = 1
+
+"""
+    MSG_INFO
+
+Message severity level 2: Informational messages (default level).
+"""
+const MSG_INFO = 2
+
+"""
+    MSG_DEBUG
+
+Message severity level 3: Detailed debugging information.
+"""
+const MSG_DEBUG = 3
+
+"""
+    MSG_TRACE
+
+Message severity level 4: Very verbose trace information.
+"""
+const MSG_TRACE = 4
 
 # Global message level (can be set by user)
 const DEFAULT_MSG_LEVEL = MSG_INFO
 MSG_LEVEL = Ref(DEFAULT_MSG_LEVEL)
 
-# Set message level
+"""
+    set_message_level(level::Int)
+
+Set the global message verbosity level.
+
+# Arguments
+- `level`: Message level (0-4)
+
+# Message Levels
+- `0` (`MSG_ERROR`): Only errors
+- `1` (`MSG_WARNING`): Errors and warnings
+- `2` (`MSG_INFO`): Errors, warnings, and informational (default)
+- `3` (`MSG_DEBUG`): Include debug messages
+- `4` (`MSG_TRACE`): Include trace messages (very verbose)
+
+# Example
+```julia
+set_message_level(MSG_DEBUG)  # Show debug messages
+set_message_level(3)          # Same as above
+```
+"""
 set_message_level(level::Int) = (MSG_LEVEL[] = level)
 
-# Main message function
+"""
+    message(msg::String, level::Int=MSG_INFO; flush_output::Bool=true)
+
+Output a message with the specified severity level.
+
+Messages are only displayed if their severity is at or below the current message
+level (set via [`set_message_level`](@ref)).
+
+# Arguments
+- `msg`: Message text to display
+- `level`: Message severity level (0-4, default: MSG_INFO)
+- `flush_output`: Whether to flush stdout/stderr after printing (default: true)
+
+# Description
+Messages at MSG_ERROR level will throw an error after printing.
+
+# Example
+```julia
+message("Processing started", MSG_INFO)
+message("Debug value: \$(x)", MSG_DEBUG)
+```
+
+# See Also
+- [`msg_error`](@ref), [`msg_warning`](@ref), [`msg_info`](@ref), [`msg_debug`](@ref), [`msg_trace`](@ref)
+"""
 function message(msg::String, level::Int=MSG_INFO; flush_output::Bool=true)
     if level <= MSG_LEVEL[]
         prefix = if level == MSG_ERROR
@@ -156,9 +228,47 @@ function message(msg::String, level::Int=MSG_INFO; flush_output::Bool=true)
     end
 end
 
-# Convenience functions
+"""
+    msg_error(msg::String)
+
+Output an error message and halt program execution.
+
+Equivalent to `message(msg, MSG_ERROR)`.
+"""
 msg_error(msg::String) = message(msg, MSG_ERROR)
+
+"""
+    msg_warning(msg::String)
+
+Output a warning message.
+
+Equivalent to `message(msg, MSG_WARNING)`.
+"""
 msg_warning(msg::String) = message(msg, MSG_WARNING)
+
+"""
+    msg_info(msg::String)
+
+Output an informational message.
+
+Equivalent to `message(msg, MSG_INFO)`.
+"""
 msg_info(msg::String) = message(msg, MSG_INFO)
+
+"""
+    msg_debug(msg::String)
+
+Output a debug message (only shown when message level ≥ 3).
+
+Equivalent to `message(msg, MSG_DEBUG)`.
+"""
 msg_debug(msg::String) = message(msg, MSG_DEBUG)
+
+"""
+    msg_trace(msg::String)
+
+Output a trace message (only shown when message level = 4).
+
+Equivalent to `message(msg, MSG_TRACE)`.
+"""
 msg_trace(msg::String) = message(msg, MSG_TRACE)

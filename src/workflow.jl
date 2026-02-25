@@ -1,6 +1,27 @@
 # Workflow functions and definitions
 
-# Abstract type for Sparrow Workflow
+"""
+    SparrowWorkflow <: AbstractDict{String,Any}
+
+Abstract base type for all Sparrow workflows.
+
+All workflow types created with [`@workflow_type`](@ref) inherit from `SparrowWorkflow`.
+This type subtypes `AbstractDict{String,Any}` to provide a dictionary interface for
+accessing workflow parameters.
+
+# Dictionary Interface
+
+Workflows support standard dictionary operations:
+- `workflow["key"]` - Get parameter (throws error if not found)
+- `workflow["key"] = value` - Set parameter
+- `haskey(workflow.params, "key")` - Check if parameter exists
+- `keys(workflow.params)` - Get all parameter names
+- `length(workflow)` - Number of parameters
+
+# See Also
+- [`@workflow_type`](@ref)
+- [`get_param`](@ref)
+"""
 abstract type SparrowWorkflow <: AbstractDict{String,Any} end
 
 # Implement dict interface (same for all subtypes)
@@ -16,12 +37,51 @@ Base.iterate(p::SparrowWorkflow) = iterate(p.params)
 Base.iterate(p::SparrowWorkflow, state) = iterate(p.params, state)
 Base.length(p::SparrowWorkflow) = length(p.params)
 
-# Helper for default values (since workflow["key", default] isn't valid syntax)
+"""
+    get_param(workflow::SparrowWorkflow, key::String, default) → Any
+
+Get a workflow parameter with a default value if not found.
+
+# Arguments
+- `workflow`: Workflow instance
+- `key`: Parameter name
+- `default`: Default value to return if parameter not found
+
+# Returns
+Parameter value if found, otherwise `default`
+
+# Example
+```julia
+span = get_param(workflow, "minute_span", 10)
+threshold = get_param(workflow, "threshold", 5.0)
+```
+"""
 function get_param(workflow::SparrowWorkflow, key::String, default)
     return get(workflow.params, key, default)
 end
 
-# Helper version with type assertion
+"""
+    get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) → T
+
+Get a workflow parameter with type checking.
+
+# Arguments
+- `workflow`: Workflow instance
+- `key`: Parameter name
+- `T`: Expected type
+
+# Returns
+Parameter value (type-asserted to `T`)
+
+# Throws
+- Error if parameter not found
+- Error if parameter type doesn't match `T`
+
+# Example
+```julia
+moments = get_param(workflow, "raw_moment_names", Vector{String})
+```
+"""
 function get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) where {T}
     if !haskey(workflow.params, key)
         msg_error("Required parameter '$key' not found in $(typeof(workflow)). Available parameters: $(keys(workflow.params))")
@@ -33,7 +93,43 @@ function get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) where {T}
     return value::T
 end
 
-# Macro to define a workflow type with constructor
+"""
+    @workflow_type Name
+
+Create a new workflow type that inherits from [`SparrowWorkflow`](@ref).
+
+This macro generates:
+1. A struct with a `params::Dict{String,Any}` field
+2. A keyword constructor that converts kwargs to String-keyed Dict
+
+# Example
+```julia
+@workflow_type MyWorkflow
+
+workflow = MyWorkflow(
+    base_working_dir = "/tmp/work",
+    base_archive_dir = "/data/archive",
+    base_data_dir = "/data/raw",
+    steps = [
+        "qc" => QCStep,
+        "grid" => GridStep
+    ]
+)
+```
+
+# Expands to
+```julia
+struct MyWorkflow <: SparrowWorkflow
+    params::Dict{String,Any}
+end
+
+MyWorkflow(; kwargs...) = MyWorkflow(Dict{String,Any}(string(k) => v for (k, v) in kwargs))
+```
+
+# See Also
+- [`@workflow_types`](@ref)
+- [`@workflow_step`](@ref)
+"""
 macro workflow_type(name)
     return quote
         struct $(esc(name)) <: SparrowWorkflow
@@ -44,7 +140,21 @@ macro workflow_type(name)
     end
 end
 
-# Define multiple workflow types at once
+"""
+    @workflow_types Name1 Name2 Name3...
+
+Define multiple workflow types at once.
+
+Equivalent to calling [`@workflow_type`](@ref) for each type individually.
+
+# Example
+```julia
+@workflow_types RadarQC RadarGrid RadarMerge
+```
+
+# See Also
+- [`@workflow_type`](@ref)
+"""
 macro workflow_types(names...)
     exprs = []
     for name in names
@@ -58,13 +168,70 @@ macro workflow_types(names...)
     return Expr(:block, exprs...)
 end
 
-# Macro to define a workflow step type
+"""
+    @workflow_step Name
+
+Define a workflow step type for dispatch.
+
+Step types are empty structs used for type-based dispatch in [`workflow_step`](@ref) 
+function implementations.
+
+# Example
+```julia
+@workflow_step ConvertData
+
+function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{ConvertData},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    # Implementation
+end
+```
+
+# Expands to
+```julia
+struct ConvertData end
+```
+
+# See Also
+- [`@workflow_type`](@ref)
+- [`workflow_step`](@ref)
+"""
 macro workflow_step(name)
     return quote
         struct $(esc(name)) end
     end
 end
 
+"""
+    run_workflow(workflow::SparrowWorkflow, parsed_args) → Bool
+
+Execute a complete workflow from start to finish.
+
+This is the main entry point for executing workflows. It sets up workflow parameters,
+assigns workers for distributed processing, and processes the workflow across the
+specified time range.
+
+# Arguments
+- `workflow`: A workflow instance created with [`@workflow_type`](@ref)
+- `parsed_args`: Parsed command-line arguments (Dict with keys like "start", "end", "nworkers", etc.)
+
+# Returns
+- `true` if workflow completed successfully, `false` otherwise
+
+# Description
+The function performs these steps:
+1. Sets up workflow parameters from command-line arguments
+2. Assigns workers for distributed processing (if workers available)
+3. Processes the workflow across the specified time range
+4. Handles errors and cleanup
+
+# Called By
+The `main` function in the Sparrow module (automatically when using the `sparrow` script)
+
+# See Also
+- [`assign_workers`](@ref)
+- [`process_workflow`](@ref)
+"""
 function run_workflow(workflow::SparrowWorkflow, parsed_args)
 
     # Override the log_prefix if provided in the arguments, otherwise use a default based on the workflow type and current time
@@ -118,6 +285,13 @@ function run_workflow(workflow::SparrowWorkflow, parsed_args)
     return status
 end
 
+"""
+    setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
+
+Internal function to set up workflow parameters from command-line arguments.
+
+Merges command-line arguments into the workflow's parameter dictionary.
+"""
 function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     # This function can be used to set up any workflow specific parameters or directories before processing starts
 
@@ -167,6 +341,33 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
 end
 
 # Main function to process radar data
+"""
+    assign_workers(workflow::SparrowWorkflow)
+
+Distribute files across available workers for parallel processing.
+
+Creates a file queue and distributes processing tasks across all available workers.
+Files are organized by time windows and assigned to workers as they become available.
+
+# Arguments
+- `workflow`: Workflow instance with configured parameters
+
+# Prerequisites
+- Workers must be initialized (via `addprocs` or cluster manager)
+- Workflow must be loaded on all workers
+
+# Description
+This function:
+1. Discovers files in the specified time range
+2. Divides them into time-based chunks
+3. Distributes chunks across workers
+4. Monitors worker progress
+5. Handles worker failures
+
+# See Also
+- [`process_workflow`](@ref)
+- [`run_workflow`](@ref)
+"""
 function assign_workers(workflow::SparrowWorkflow)
 
     msg_info("Processing data with $(typeof(workflow))...")
@@ -370,6 +571,28 @@ function assign_workers(workflow::SparrowWorkflow)
     return true
 end
 
+"""
+    process_workflow(workflow::SparrowWorkflow) → Bool
+
+Process a workflow with the main process (non-distributed).
+
+This function processes the entire workflow sequentially on the main process.
+Used when running without distributed workers.
+
+# Arguments
+- `workflow`: Workflow instance
+
+# Returns
+- `true` if processing succeeded, `false` otherwise
+
+# Description
+Processes all time windows and workflow steps sequentially without using
+distributed workers. Useful for debugging or when parallelization is not needed.
+
+# See Also
+- [`assign_workers`](@ref)
+- [`run_workflow`](@ref)
+"""
 function process_workflow(workflow::SparrowWorkflow)
 
     # Set the local variables from the workflow
@@ -496,6 +719,19 @@ function process_workflow(workflow::SparrowWorkflow)
     return "processed successfully"
 end
 
+"""
+    process_volume(workflow::SparrowWorkflow, start_time, stop_time)
+
+Internal function to process a single time volume through all workflow steps.
+
+# Arguments
+- `workflow`: Workflow instance
+- `start_time`: Start time for this volume
+- `stop_time`: Stop time for this volume
+
+# Description
+Executes all workflow steps in sequence for files within the specified time window.
+"""
 function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
 
     date = Dates.format(start_time, "YYYYmmdd")
@@ -537,6 +773,20 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
 end
 
 # Main QC workflow dispatcher - takes a workflow type as argument
+"""
+    run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop_time, temp_dir)
+
+Internal function to execute a single workflow step.
+
+Calls the user-defined [`workflow_step`](@ref) function for the specified step.
+
+# Arguments
+- `workflow`: Workflow instance
+- `step_num`: Step number (1-indexed)
+- `start_time`: Start time for this processing window
+- `stop_time`: Stop time for this processing window
+- `temp_dir`: Temporary directory for this processing run
+"""
 function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop_time, temp_dir)
 
     # Common preprocessing that applies to all workflows
@@ -564,6 +814,19 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
     return true
 end
 
+"""
+    check_processed(workflow::SparrowWorkflow, file::String, archive_dir::String) → Bool
+
+Check if a file has already been processed (exists in archive).
+
+# Arguments
+- `workflow`: Workflow instance
+- `file`: File path to check
+- `archive_dir`: Archive directory path
+
+# Returns
+- `true` if file already processed, `false` otherwise
+"""
 function check_processed(workflow::SparrowWorkflow, file::String, archive_dir::String)
 
     # Make sure the hidden processed directory exists

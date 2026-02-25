@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Provided Workflow Steps · Sparrow.jl</title><meta name="title" content="Provided Workflow Steps · Sparrow.jl"/><meta property="og:title" content="Provided Workflow Steps · Sparrow.jl"/><meta property="twitter:title" content="Provided Workflow Steps · Sparrow.jl"/><meta name="description" content="Documentation for Sparrow.jl."/><meta property="og:description" content="Documentation for Sparrow.jl."/><meta property="twitter:description" content="Documentation for Sparrow.jl."/><meta property="og:url" content="https://mmbell.github.io/Sparrow.jl/provided_steps.html"/><meta property="twitter:url" content="https://mmbell.github.io/Sparrow.jl/provided_steps.html"/><link rel="canonical" href="https://mmbell.github.io/Sparrow.jl/provided_steps.html"/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="index.html">Sparrow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="index.html">Home</a></li><li><a class="tocitem" href="getting_started.html">Getting Started</a></li><li><a class="tocitem" href="workflow_guide.html">Workflow Guide</a></li><li class="is-active"><a class="tocitem" href="provided_steps.html">Provided Workflow Steps</a><ul class="internal"><li><a class="tocitem" href="#Utility-Steps"><span>Utility Steps</span></a></li><li><a class="tocitem" href="#Quality-Control-Steps"><span>Quality Control Steps</span></a></li><li><a class="tocitem" href="#Gridding-Steps"><span>Gridding Steps</span></a></li><li><a class="tocitem" href="#Helper-Functions"><span>Helper Functions</span></a></li><li><a class="tocitem" href="#Complete-Workflow-Example"><span>Complete Workflow Example</span></a></li><li><a class="tocitem" href="#Tips-for-Using-Provided-Steps"><span>Tips for Using Provided Steps</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="examples.html">Examples</a></li><li><a class="tocitem" href="api.html">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href="provided_steps.html">Provided Workflow Steps</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href="provided_steps.html">Provided Workflow Steps</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/mmbell/Sparrow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/mmbell/Sparrow.jl/blob/main/docs/src/provided_steps.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Provided-Workflow-Steps"><a class="docs-heading-anchor" href="#Provided-Workflow-Steps">Provided Workflow Steps</a><a id="Provided-Workflow-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Provided-Workflow-Steps" title="Permalink"></a></h1><p>Sparrow.jl includes several pre-built workflow steps that handle common radar data processing tasks. These steps are ready to use in your workflows and serve as examples for creating custom steps.</p><h2 id="Utility-Steps"><a class="docs-heading-anchor" href="#Utility-Steps">Utility Steps</a><a id="Utility-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Utility-Steps" title="Permalink"></a></h2><h3 id="PassThroughStep"><a class="docs-heading-anchor" href="#PassThroughStep">PassThroughStep</a><a id="PassThroughStep-1"></a><a class="docs-heading-anchor-permalink" href="#PassThroughStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>utility.jl</code></p><p><strong>Purpose:</strong> Copy all files from input directory to output directory without modification.</p><p><strong>Use Cases:</strong></p><ul><li>Testing workflows</li><li>Creating checkpoints in multi-step workflows</li><li>Archiving intermediate results</li></ul><p><strong>Parameters Required:</strong> None</p><p><strong>Example:</strong></p><pre><code class="language-julia hljs">@workflow_step PassThroughStep  # Already defined, just use it
+
+workflow = MyWorkflow(
+    steps = [
+        (&quot;copy_raw&quot;, PassThroughStep, &quot;base_data&quot;, true),
+        # ... other steps
+    ],
+    # ... other params
+)
+
+# No custom implementation needed - step is already defined</code></pre><p><strong>Behavior:</strong></p><ul><li>Copies all files from input directory to output directory</li><li>Follows symlinks</li><li>Processes all files regardless of time window</li><li>Useful for creating a snapshot of data at a particular workflow stage</li></ul><hr/><h3 id="filterByTimeStep"><a class="docs-heading-anchor" href="#filterByTimeStep">filterByTimeStep</a><a id="filterByTimeStep-1"></a><a class="docs-heading-anchor-permalink" href="#filterByTimeStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>utility.jl</code></p><p><strong>Purpose:</strong> Filter and copy only files that fall within the specified time window.</p><p><strong>Use Cases:</strong></p><ul><li>Filtering data by time before expensive processing</li><li>Selecting specific time ranges from a larger dataset</li><li>Time-based quality control</li></ul><p><strong>Parameters Required:</strong> None (uses <code>start_time</code> and <code>stop_time</code> from workflow)</p><p><strong>Example:</strong></p><pre><code class="language-julia hljs">@workflow_step filterByTimeStep  # Already defined
+
+workflow = MyWorkflow(
+    steps = [
+        (&quot;filter&quot;, filterByTimeStep, &quot;base_data&quot;, false),
+        (&quot;process&quot;, MyProcessingStep, &quot;filter&quot;, true),
+    ],
+    # ... other params
+)</code></pre><p><strong>Behavior:</strong></p><ul><li>Parses filename to extract scan start time</li><li>Only copies files where <code>start_time &lt;= scan_start &lt; stop_time</code></li><li>Supports CfRadial, Sigmet, and RAW file naming conventions</li></ul><hr/><h2 id="Quality-Control-Steps"><a class="docs-heading-anchor" href="#Quality-Control-Steps">Quality Control Steps</a><a id="Quality-Control-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Quality-Control-Steps" title="Permalink"></a></h2><h3 id="RadxConvertStep"><a class="docs-heading-anchor" href="#RadxConvertStep">RadxConvertStep</a><a id="RadxConvertStep-1"></a><a class="docs-heading-anchor-permalink" href="#RadxConvertStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>qc.jl</code></p><p><strong>Purpose:</strong> Convert radar data files to CfRadial format using RadxConvert.</p><p><strong>Use Cases:</strong></p><ul><li>Converting from Sigmet, UF, or other formats to CfRadial</li><li>Standardizing data format across different radar systems</li><li>Preparing data for downstream processing</li></ul><p><strong>Parameters Required:</strong></p><ul><li><code>process_all</code> (optional): If <code>true</code>, process all files regardless of time window</li></ul><p><strong>External Dependencies:</strong></p><ul><li><code>RadxConvert</code> command-line tool (from LROSE toolkit)</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">@workflow_step RadxConvertStep  # Already defined
+
+workflow = MyWorkflow(
+    steps = [
+        (&quot;convert&quot;, RadxConvertStep, &quot;base_data&quot;, false),
+        (&quot;qc&quot;, MyQCStep, &quot;convert&quot;, true),
+    ],
+    process_all = false,  # Only process files in time window
+    # ... other params
+)</code></pre><p><strong>Behavior:</strong></p><ul><li>Runs <code>RadxConvert -sort_rays_by_time -const_ngates</code> on each input file</li><li>Sorts rays by time for consistent ordering</li><li>Forces constant number of gates for uniform dimensions</li><li>Skips files outside time window (unless <code>process_all = true</code>)</li><li>Handles multiple file formats automatically</li></ul><p><strong>Output:</strong></p><ul><li>CfRadial NetCDF files with standardized structure</li></ul><hr/><h3 id="RoninQCStep"><a class="docs-heading-anchor" href="#RoninQCStep">RoninQCStep</a><a id="RoninQCStep-1"></a><a class="docs-heading-anchor-permalink" href="#RoninQCStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>qc.jl</code></p><p><strong>Purpose:</strong> Apply machine learning-based quality control using Ronin.jl.</p><p><strong>Use Cases:</strong></p><ul><li>Automated clutter removal</li><li>Artifact detection and removal</li><li>ML-based quality control filtering</li></ul><p><strong>Parameters Required:</strong></p><ul><li><code>ronin_config</code>: Path to Ronin configuration file (JLD2 format)</li></ul><p><strong>External Dependencies:</strong></p><ul><li>Ronin.jl package and trained models</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">@workflow_step RoninQCStep  # Already defined
+
+workflow = MyWorkflow(
+    steps = [
+        (&quot;convert&quot;, RadxConvertStep, &quot;base_data&quot;, false),
+        (&quot;ronin_qc&quot;, RoninQCStep, &quot;convert&quot;, true),
+    ],
+    ronin_config = &quot;/path/to/ronin_config.jld2&quot;,
+    # ... other params
+)</code></pre><p><strong>Behavior:</strong></p><ul><li>Loads Ronin configuration and trained models</li><li>Copies input file to output directory</li><li>Applies composite QC to the file in-place</li><li>Modifies radar moments based on ML predictions</li></ul><p><strong>Output:</strong></p><ul><li>Quality-controlled CfRadial files with artifacts removed</li></ul><hr/><h2 id="Gridding-Steps"><a class="docs-heading-anchor" href="#Gridding-Steps">Gridding Steps</a><a id="Gridding-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Gridding-Steps" title="Permalink"></a></h2><p>All gridding steps use the Daisho.jl package for radar coordinate transformations and interpolation.</p><h3 id="Common-Parameters"><a class="docs-heading-anchor" href="#Common-Parameters">Common Parameters</a><a id="Common-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Parameters" title="Permalink"></a></h3><p>Most gridding steps require these workflow parameters:</p><ul><li><code>qc_moment_dict</code>: Dictionary mapping moment names (e.g., &quot;DBZ&quot; → &quot;reflectivity&quot;)</li><li><code>grid_type_dict</code>: Dictionary specifying interpolation method per moment (<code>:linear</code>, <code>:weighted</code>, <code>:nearest</code>)</li><li><code>beam_inflation</code>: Beam width inflation factor (typically 1.0-2.0)</li><li><code>missing_key</code>: Value for missing/invalid data (typically -9999.0)</li><li><code>valid_key</code>: Minimum valid data value (typically -32.0 for DBZ)</li></ul><hr/><h3 id="GridRHIStep"><a class="docs-heading-anchor" href="#GridRHIStep">GridRHIStep</a><a id="GridRHIStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridRHIStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Grid RHI (Range-Height Indicator) scans to a regular range-height grid.</p><p><strong>Use Cases:</strong></p><ul><li>Processing vertically-pointing or RHI scans</li><li>Creating cross-sections</li><li>Studying vertical structure</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters (above)</li><li><code>rmin</code>: Minimum range (m)</li><li><code>rincr</code>: Range increment (m)</li><li><code>rdim</code>: Number of range bins</li><li><code>rhi_zmin</code>: Minimum height (m)</li><li><code>rhi_zincr</code>: Height increment (m)</li><li><code>rhi_zdim</code>: Number of height bins</li><li><code>rhi_power_threshold</code>: Power threshold for valid data</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;qc&quot;, MyQCStep, &quot;base_data&quot;, false),
+        (&quot;grid_rhi&quot;, GridRHIStep, &quot;qc&quot;, true),
+    ],
+    qc_moment_dict = Dict(&quot;DBZ&quot; =&gt; &quot;reflectivity&quot;, &quot;VEL&quot; =&gt; &quot;velocity&quot;),
+    grid_type_dict = Dict(&quot;reflectivity&quot; =&gt; :linear, &quot;velocity&quot; =&gt; :weighted),
+    rmin = 0.0,
+    rincr = 100.0,
+    rdim = 200,
+    rhi_zmin = 0.0,
+    rhi_zincr = 100.0,
+    rhi_zdim = 150,
+    beam_inflation = 1.5,
+    rhi_power_threshold = -10.0,
+    missing_key = -9999.0,
+    valid_key = -32.0,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Files named: <code>gridded_rhi_YYYYmmdd_HHMM_AA.A.nc</code> (AA.A = azimuth angle)</li><li>Regular 2D grid in range and height coordinates</li></ul><hr/><h3 id="GridCompositeStep"><a class="docs-heading-anchor" href="#GridCompositeStep">GridCompositeStep</a><a id="GridCompositeStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridCompositeStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Create a composite (CAPPI-like) grid from volumetric radar scans.</p><p><strong>Use Cases:</strong></p><ul><li>Creating plan-view displays</li><li>Analyzing horizontal structure</li><li>Maximum/composite reflectivity products</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters</li><li><code>long_xmin</code>: Minimum X coordinate (m, radar-relative)</li><li><code>long_xincr</code>: X increment (m)</li><li><code>long_xdim</code>: Number of X bins</li><li><code>long_ymin</code>: Minimum Y coordinate (m)</li><li><code>long_yincr</code>: Y increment (m)</li><li><code>long_ydim</code>: Number of Y bins</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;grid_composite&quot;, GridCompositeStep, &quot;qc&quot;, true),
+    ],
+    # Common params...
+    long_xmin = -50000.0,
+    long_xincr = 500.0,
+    long_xdim = 200,
+    long_ymin = -50000.0,
+    long_yincr = 500.0,
+    long_ydim = 200,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Files named: <code>gridded_composite_YYYYmmdd_HHMM.nc</code></li><li>2D horizontal composite grid</li></ul><hr/><h3 id="GridVolumeStep"><a class="docs-heading-anchor" href="#GridVolumeStep">GridVolumeStep</a><a id="GridVolumeStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridVolumeStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Grid volumetric radar data to a 3D Cartesian grid.</p><p><strong>Use Cases:</strong></p><ul><li>Creating 3D analysis-ready datasets</li><li>Volume rendering</li><li>3D structure analysis</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters</li><li><code>vol_xmin</code>, <code>vol_xincr</code>, <code>vol_xdim</code>: X-axis parameters (m)</li><li><code>vol_ymin</code>, <code>vol_yincr</code>, <code>vol_ydim</code>: Y-axis parameters (m)</li><li><code>zmin</code>, <code>zincr</code>, <code>zdim</code>: Z-axis (height) parameters (m)</li><li><code>ppi_power_threshold</code>: Power threshold for PPI scans</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;grid_volume&quot;, GridVolumeStep, &quot;qc&quot;, true),
+    ],
+    # Common params...
+    vol_xmin = -40000.0,
+    vol_xincr = 500.0,
+    vol_xdim = 160,
+    vol_ymin = -40000.0,
+    vol_yincr = 500.0,
+    vol_ydim = 160,
+    zmin = 0.0,
+    zincr = 250.0,
+    zdim = 60,
+    ppi_power_threshold = -10.0,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Files named: <code>gridded_volume_YYYYmmdd_HHMM.nc</code></li><li>3D Cartesian grid (X, Y, Z)</li></ul><hr/><h3 id="GridLatlonStep"><a class="docs-heading-anchor" href="#GridLatlonStep">GridLatlonStep</a><a id="GridLatlonStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridLatlonStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Grid volumetric radar data to a geographic (lat/lon) coordinate system.</p><p><strong>Use Cases:</strong></p><ul><li>Overlaying radar data on maps</li><li>Multi-radar merging in geographic coordinates</li><li>GIS integration</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters</li><li><code>latmin</code>: Minimum latitude (degrees)</li><li><code>latdim</code>: Number of latitude bins</li><li><code>lonmin</code>: Minimum longitude (degrees)</li><li><code>londim</code>: Number of longitude bins</li><li><code>degincr</code>: Degree increment (both lat and lon)</li><li><code>zmin</code>, <code>zincr</code>, <code>zdim</code>: Height parameters (m)</li><li><code>ppi_power_threshold</code>: Power threshold</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;grid_latlon&quot;, GridLatlonStep, &quot;qc&quot;, true),
+    ],
+    # Common params...
+    latmin = 25.0,
+    latdim = 100,
+    lonmin = -80.0,
+    londim = 100,
+    degincr = 0.01,  # ~1 km
+    zmin = 0.0,
+    zincr = 250.0,
+    zdim = 60,
+    ppi_power_threshold = -10.0,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Files named: <code>gridded_latlon_YYYYmmdd_HHMM.nc</code></li><li>3D grid in latitude, longitude, height coordinates</li></ul><hr/><h3 id="GridPPIStep"><a class="docs-heading-anchor" href="#GridPPIStep">GridPPIStep</a><a id="GridPPIStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridPPIStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Grid individual PPI (Plan Position Indicator) sweeps separately.</p><p><strong>Use Cases:</strong></p><ul><li>Analyzing individual elevation angles</li><li>Creating elevation-specific products</li><li>Studying elevation-dependent phenomena</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters</li><li><code>long_xmin</code>, <code>long_xincr</code>, <code>long_xdim</code>: X-axis parameters (m)</li><li><code>long_ymin</code>, <code>long_yincr</code>, <code>long_ydim</code>: Y-axis parameters (m)</li><li><code>ppi_power_threshold</code>: Power threshold</li><li><code>max_ppi_angle</code>: Maximum elevation angle to grid (degrees)</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;grid_ppi&quot;, GridPPIStep, &quot;qc&quot;, true),
+    ],
+    # Common params...
+    long_xmin = -50000.0,
+    long_xincr = 500.0,
+    long_xdim = 200,
+    long_ymin = -50000.0,
+    long_yincr = 500.0,
+    long_ydim = 200,
+    max_ppi_angle = 10.0,  # Only grid sweeps &lt;= 10 degrees
+    ppi_power_threshold = -10.0,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Files named: <code>gridded_ppi_YYYYmmdd_HHMM_EE.E.nc</code> (EE.E = elevation angle)</li><li>One file per PPI sweep</li><li>2D horizontal grids</li></ul><hr/><h3 id="GridQVPStep"><a class="docs-heading-anchor" href="#GridQVPStep">GridQVPStep</a><a id="GridQVPStep-1"></a><a class="docs-heading-anchor-permalink" href="#GridQVPStep" title="Permalink"></a></h3><p><strong>Module:</strong> <code>grid.jl</code></p><p><strong>Purpose:</strong> Generate Quasi-Vertical Profile (QVP) by averaging near-vertical scans.</p><p><strong>Use Cases:</strong></p><ul><li>Profiling atmospheric structure</li><li>Time-height displays</li><li>Microphysical retrievals</li></ul><p><strong>Parameters Required:</strong></p><ul><li>Common gridding parameters</li><li><code>zmin</code>, <code>zincr</code>, <code>zdim</code>: Height parameters (m)</li><li><code>qvp_power_threshold</code>: Power threshold</li><li><code>min_qvp_angle</code>: Minimum elevation angle for QVP (degrees, typically 70-90°)</li></ul><p><strong>Example:</strong></p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    steps = [
+        (&quot;grid_qvp&quot;, GridQVPStep, &quot;qc&quot;, true),
+    ],
+    # Common params...
+    zmin = 0.0,
+    zincr = 100.0,
+    zdim = 150,
+    min_qvp_angle = 75.0,  # Only use scans &gt;= 75 degrees
+    qvp_power_threshold = -15.0,
+)</code></pre><p><strong>Output:</strong></p><ul><li>Vertical profiles averaged azimuthally</li><li>Useful for precipitation microphysics studies</li></ul><hr/><h2 id="Helper-Functions"><a class="docs-heading-anchor" href="#Helper-Functions">Helper Functions</a><a id="Helper-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Helper-Functions" title="Permalink"></a></h2><h3 id="get*scan*start"><a class="docs-heading-anchor" href="#get*scan*start">get<em>scan</em>start</a><a id="get*scan*start-1"></a><a class="docs-heading-anchor-permalink" href="#get*scan*start" title="Permalink"></a></h3><p><strong>Module:</strong> <code>utility.jl</code></p><p><strong>Purpose:</strong> Extract scan start time from radar filename.</p><p><strong>Supported Formats:</strong></p><ol><li><strong>CfRadial</strong>: <code>cfrad.YYYYmmdd_HHMMSS.*</code></li><li><strong>Sigmet</strong>: <code>SEAYYYYmmdd_HHMMSS*</code></li><li><strong>RAW</strong>: Uses <code>RadxPrint</code> to extract metadata</li></ol><p><strong>Usage:</strong></p><pre><code class="language-julia hljs">scan_time = get_scan_start(&quot;/path/to/cfrad.20240101_120000.nc&quot;)
+# Returns: DateTime(2024, 1, 1, 12, 0, 0)</code></pre><p><strong>Note:</strong> For RAW files, requires <code>RadxPrint</code> command-line tool.</p><hr/><h2 id="Complete-Workflow-Example"><a class="docs-heading-anchor" href="#Complete-Workflow-Example">Complete Workflow Example</a><a id="Complete-Workflow-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Workflow-Example" title="Permalink"></a></h2><p>Here&#39;s a complete workflow using several provided steps:</p><pre><code class="language-julia hljs">using Sparrow
+
+@workflow_type RadarProcessingWorkflow
+
+workflow = RadarProcessingWorkflow(
+    # Directories
+    base_working_dir = &quot;/tmp/radar_processing&quot;,
+    base_archive_dir = &quot;/data/archive&quot;,
+    base_data_dir = &quot;/data/raw/radar&quot;,
+    base_plot_dir = &quot;/data/plots&quot;,
+    
+    # Time parameters
+    minute_span = 10,
+    reverse = false,
+    
+    # Workflow steps
+    steps = [
+        (&quot;convert&quot;, RadxConvertStep, &quot;base_data&quot;, false),
+        (&quot;ronin_qc&quot;, RoninQCStep, &quot;convert&quot;, false),
+        (&quot;grid_volume&quot;, GridVolumeStep, &quot;ronin_qc&quot;, true),
+        (&quot;grid_ppi&quot;, GridPPIStep, &quot;ronin_qc&quot;, true),
+    ],
+    
+    # Moment configuration
+    qc_moment_dict = Dict(
+        &quot;DBZ&quot; =&gt; &quot;reflectivity&quot;,
+        &quot;VEL&quot; =&gt; &quot;velocity&quot;,
+        &quot;WIDTH&quot; =&gt; &quot;spectrum_width&quot;
+    ),
+    grid_type_dict = Dict(
+        &quot;reflectivity&quot; =&gt; :linear,
+        &quot;velocity&quot; =&gt; :weighted,
+        &quot;spectrum_width&quot; =&gt; :weighted
+    ),
+    
+    # Ronin QC
+    ronin_config = &quot;/data/models/ronin_seapol.jld2&quot;,
+    
+    # Volume grid parameters
+    vol_xmin = -40000.0,
+    vol_xincr = 500.0,
+    vol_xdim = 160,
+    vol_ymin = -40000.0,
+    vol_yincr = 500.0,
+    vol_ydim = 160,
+    zmin = 0.0,
+    zincr = 250.0,
+    zdim = 60,
+    
+    # PPI grid parameters
+    long_xmin = -50000.0,
+    long_xincr = 500.0,
+    long_xdim = 200,
+    long_ymin = -50000.0,
+    long_yincr = 500.0,
+    long_ydim = 200,
+    max_ppi_angle = 5.0,
+    
+    # Common gridding parameters
+    beam_inflation = 1.5,
+    ppi_power_threshold = -10.0,
+    missing_key = -9999.0,
+    valid_key = -32.0,
+    
+    message_level = 2
+)</code></pre><p>Run with:</p><pre><code class="language-bash hljs">julia sparrow radar_processing.jl --datetime 20240115_120000 --num_workers 4</code></pre><hr/><h2 id="Tips-for-Using-Provided-Steps"><a class="docs-heading-anchor" href="#Tips-for-Using-Provided-Steps">Tips for Using Provided Steps</a><a id="Tips-for-Using-Provided-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Tips-for-Using-Provided-Steps" title="Permalink"></a></h2><ol><li><p><strong>Check Parameters</strong>: Each step expects specific workflow parameters. Missing parameters will cause errors.</p></li><li><p><strong>Archive Strategy</strong>: Set the <code>archive</code> flag (<code>true</code>/<code>false</code>) appropriately:</p><ul><li><code>false</code> for intermediate steps that can be regenerated</li><li><code>true</code> for final products you want to keep</li></ul></li><li><p><strong>Input Chaining</strong>: Each step&#39;s input directory should match a previous step&#39;s name or &quot;base_data&quot;:</p><pre><code class="language-julia hljs">(&quot;step1&quot;, Step1Type, &quot;base_data&quot;, false),
+(&quot;step2&quot;, Step2Type, &quot;step1&quot;, false),      # Uses step1&#39;s output
+(&quot;step3&quot;, Step3Type, &quot;step2&quot;, true),       # Uses step2&#39;s output</code></pre></li><li><p><strong>External Tools</strong>: Steps using <code>RadxConvert</code> or <code>RadxPrint</code> require LROSE toolkit installed and in PATH.</p></li><li><p><strong>Performance</strong>: Gridding steps are computationally intensive. Use multiple workers for large datasets.</p></li><li><p><strong>Customize</strong>: These steps serve as templates. Copy and modify them for your specific needs.</p></li></ol><hr/><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="workflow_guide.html">Workflow Guide</a> - How to create custom workflow steps</li><li><a href="examples.html">Examples</a> - Complete workflow examples</li><li><a href="api.html">API Reference</a> - Core Sparrow functions</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="workflow_guide.html">« Workflow Guide</a><a class="docs-footer-nextpage" href="examples.html">Examples »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 24 February 2026 23:14">Tuesday 24 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
