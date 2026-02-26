@@ -6,14 +6,14 @@ DocMeta.setdocmeta!(Sparrow, :DocTestSetup, :(using Sparrow); recursive=true)
 makedocs(;
     modules=[Sparrow],
     authors="Michael Bell <mmbell@colostate.edu> and contributors",
-    repo="https://github.com/mmbell/Sparrow.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/csu-tropical/Sparrow.jl/blob/{commit}{path}#{line}",
     sitename="Sparrow.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://mmbell.github.io/Sparrow.jl",
+        canonical="https://csu-tropical.github.io/Sparrow.jl",
         edit_link="main",
         assets=String[],
-        repolink="https://github.com/mmbell/Sparrow.jl",
+        repolink="https://github.com/csu-tropical/Sparrow.jl",
     ),
     pages=[
         "Home" => "index.md",
@@ -27,7 +27,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/mmbell/Sparrow.jl",
+    repo="github.com/csu-tropical/Sparrow.jl",
     devbranch="main",
     push_preview=true,
 )
