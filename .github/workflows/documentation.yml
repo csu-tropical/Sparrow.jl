@@ -28,8 +28,11 @@ jobs:
         shell: julia --color=yes --project=docs {0}
         run: |
           using Pkg
-          Pkg.instantiate()
+          Pkg.develop(url="https://github.com/mmbell/Daisho.jl")
+          Pkg.develop(url="https://github.com/csu-tropical/Ronin.jl")
+          Pkg.develop(url="https://github.com/csu-tropical/Sparrow.jl")
           Pkg.develop(PackageSpec(path=pwd()))
+          Pkg.instantiate()
       - name: Build and deploy
         run: julia --color=yes --project=docs docs/make.jl
         env:
