@@ -29,7 +29,7 @@ workflow = P3RoninWorkflow(
         # First step should always start with "base_data" as the input directory
         ("cfradial_raw", RadxConvertStep, "base_data", true)
         #("threshold_qc", P3QCStep, "cfradial_raw", false),
-        #("RoninQC", RoninQCStep, "cfradial_raw", true),
+        ("RoninQC", RoninQCStep, "cfradial_raw", true)
     ],
 
     # If true, then ignore the time filter and process all files in the input directory
@@ -49,7 +49,7 @@ workflow = P3RoninWorkflow(
     # Use this field to indicate valid echo
     valid_key = "DBZ",
 
-    ronin_config = "ronin_config.jld2"
+    ronin_config = "ronin_test_config.jld2"
 )
 
 function workflow_step(workflow::P3RoninWorkflow, ::Type{P3QCStep}, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, step_name::String, kwargs...)

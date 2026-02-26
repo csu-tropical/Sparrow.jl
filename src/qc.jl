@@ -42,6 +42,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RadxConvertStep}, input
     files = join(input_files, " ")
     # RadxConvert adds the YYYYmmdd automatically, so we have to remove it from output_dir
     radx_output_dir = output_dir[1:end-9]
+    # Save the date
+    start_date = Dates.format(start_time, "YYYYmmdd")
     for file in input_files
         # Get the scan start time
         scan_start = get_scan_start(file)
@@ -58,13 +60,15 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RadxConvertStep}, input
             continue
         end
         if haskey(workflow.params, "process_all") && workflow["process_all"]
-            # RadxConvert will have put it in a subdirectory with the date of the actual file, so we need to move it back to the output directory
-            date = Dates.format(scan_start, "YYYYmmdd")
-            radx_output_dir = joinpath(radx_output_dir, date)
-            msg_debug("Ignoring $date and moving files from $radx_output_dir to $output_dir")
-            for cfrad_file in readdir(radx_output_dir; join=true)
-                output_file = replace(cfrad_file, radx_output_dir => output_dir)
-                mv(cfrad_file, output_file)
+            scan_date = Dates.format(scan_start, "YYYYmmdd")
+            if scan_date != start_date
+                # RadxConvert will have put it in a subdirectory with the date of the actual file, so we need to move it back to the output directory
+                radx_output_dir = joinpath(radx_output_dir, date)
+                msg_debug("Ignoring $date and moving files from $radx_output_dir to $output_dir")
+                for cfrad_file in readdir(radx_output_dir; join=true)
+                    output_file = replace(cfrad_file, radx_output_dir => output_dir)
+                    mv(cfrad_file, output_file)
+                end
             end
         end
     end
@@ -84,6 +88,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir
    for input_file in input_files
        output_file = replace(input_file, input_dir => output_dir)
        cp(input_file, output_file, follow_symlinks=true)
-       composite_QC(ronin_config, output_file, models)
    end
+   output_files = readdir(output_dir; join=true)
+   filter!(!isdir,output_files)
+   composite_QC(ronin_config, output_files, models)
 end

@@ -173,7 +173,7 @@ end
 
 Define a workflow step type for dispatch.
 
-Step types are empty structs used for type-based dispatch in [`workflow_step`](@ref) 
+Step types are empty structs used for type-based dispatch in [`workflow_step`](@ref)
 function implementations.
 
 # Example
@@ -744,7 +744,7 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     base_data_dir = joinpath(workflow["base_data_dir"], date)
     input_files = readdir(base_data_dir; join=true)
     filter!(!isdir,input_files)
-    if !workflow["process_all"]
+    if haskey(workflow.params, "process_all") && workflow["process_all"]
         input_files = filter(file -> get_scan_start(file) >= start_time && get_scan_start(file) < stop_time, input_files)
     end
 
