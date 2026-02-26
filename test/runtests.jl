@@ -94,8 +94,8 @@ if RUN_INTEGRATION_TESTS
     end
 else
     @testset "Integration Tests (Skipped)" begin
-        @test_skip true "Set SPARROW_RUN_INTEGRATION_TESTS=1 to run integration tests"
         println("\nℹ️  Integration tests skipped. Set SPARROW_RUN_INTEGRATION_TESTS=1 to enable.")
+        @test_skip true  # Set SPARROW_RUN_INTEGRATION_TESTS=1 to run integration tests
     end
 end
 
