@@ -2,9 +2,10 @@
 
 **Ship, Plane, and Anchored Radar Research and Operational Workflows**
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://csu-tropical.github.io/Sparrow.jl/stable/)
+<!--[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://csu-tropical.github.io/Sparrow.jl/stable/) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://csu-tropical.github.io/Sparrow.jl/dev/)
-[![Build Status](https://github.com/csu-tropical/Sparrow.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/csu-tropical/Sparrow.jl/actions/workflows/CI.yml?query=branch%3Amain)
+<!-- [![Build Status](https://github.com/csu-tropical/Sparrow.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/csu-tropical/Sparrow.jl/actions/workflows/CI.yml?query=branch%3Amain) -->
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Sparrow.jl is a flexible, distributed workflow system for processing weather radar data from mobile or fixed platforms. It provides a framework for building custom data processing pipelines with built-in support for radar quality control, analysis, and visualization. Sparrow development is supported by the National Science Foundation (NSF) and National Oceanic and Atmospheric Administration (NOAA) to help improve understanding and forecasting of hazardous weather phenomena such as hurricanes and extreme rainfall. The Sparrow workflow system is designed to process data from the Colorado State University (CSU) Sea-Pol ship-borne radar and NOAA's tail Doppler radar systems aboard the Hurricane Hunter aircraft. Sparrow is part of the LROSE (Lidar Radar Open Software Environment) ecosystem and can also be used for processing data from ground-based fixed or temporarily anchored weather radar systems. The system is built in Julia to provide a high-level interface for defining complex workflows while leveraging the natively fast performance and parallel processing capabilities of the language.
 
@@ -36,26 +37,23 @@ Sparrow is part of the [LROSE](https://github.com/NCAR/lrose-core) Lidar Radar O
 
 Future support for [PyArt](https://github.com/ARM-DOE/pyart) steps as part of the workflow is planned but is not currently implemented.
 
-### Package installation
+### Package Installation
 
-If you just want to use it, install it directly from the GitHub repository:
+If you just want to use it, install it and the dependencies directly from the GitHub repositories:
 
 ```julia
 using Pkg
+Pkg.add(url="https://github.com/csu-tropical/Springsteel.jl")
+Pkg.add(url="https://github.com/csu-tropical/Daisho.jl")
+Pkg.add(url="https://github.com/csu-tropical/Ronin.jl")
 Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 ```
 
-If you want to actively develop or modify Springsteel then you can clone the repository code and install in development mode. After cloning, start Julia on the command line using `julia --project` or set the JULIA_PROJECT environmental variable:
+This will install the latest version of the code, but any updates to the code will not be reflected in your installation. You can then update the package with `Pkg.update()` which will update all packages in your environment.
 
-`export JULIA_PROJECT=/path/to/Springsteel.jl`
+If you want to actively develop or modify Sparrow then you can clone the repository code and install in development mode. After cloning, in the REPL, go into Package mode by pressing `]`. You will see the REPL change color and indicate `pkg` mode. You can install the module using `dev /path/to/Sparrow.jl` in `pkg` mode. This will update the module as changes are made to the code. You should see the dependencies being installed, and then the package will be precompiled. After installing, exit Package mode with ctrl-C. 
 
-To install Sparrow, in the REPL, go into Package mode by pressing `]`. You will see the REPL change color and indicate `pkg` mode. 
-
-If you are actively developing or modifying Springsteel then you can install the module using `dev /path/to/Sparrow.jl` in `pkg` mode. This will update the module as changes are made to the code. You should see the dependencies being installed, and then the package will be precompiled.
-
-If you wish to just install a static version of the latest code, run `activate` to activate the package environment. Then, run `instantiate` to install the necessary dependencies. You can then `add` the package, but be aware that any local updates to the code will not be reflected. 
-
-After installing, exit Package mode with ctrl-C. Test to make sure the precompilation was successful by running `using Sparrow` in the REPL. If everything is successful then you should get no errors and it will just move to a new line.
+Test to make sure the precompilation was successful by running `using Sparrow` in the REPL. If everything is successful then you should get no errors and it will just move to a new line.
 
 ## Usage
 
