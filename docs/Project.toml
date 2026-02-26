@@ -1,3 +1,5 @@
 [deps]
+Daisho = "0095e6a3-0a19-4629-8616-db2ab031b187"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+Ronin = "905eca60-9fa9-4fb3-8835-f5cd63a3719c"
 Sparrow = "e85e9086-995e-43cb-b1fa-761c47980264"
