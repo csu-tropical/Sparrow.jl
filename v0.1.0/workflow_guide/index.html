@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Workflow Guide · Sparrow.jl</title><meta name="title" content="Workflow Guide · Sparrow.jl"/><meta property="og:title" content="Workflow Guide · Sparrow.jl"/><meta property="twitter:title" content="Workflow Guide · Sparrow.jl"/><meta name="description" content="Documentation for Sparrow.jl."/><meta property="og:description" content="Documentation for Sparrow.jl."/><meta property="twitter:description" content="Documentation for Sparrow.jl."/><meta property="og:url" content="https://csu-tropical.github.io/Sparrow.jl/workflow_guide/"/><meta property="twitter:url" content="https://csu-tropical.github.io/Sparrow.jl/workflow_guide/"/><link rel="canonical" href="https://csu-tropical.github.io/Sparrow.jl/workflow_guide/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Sparrow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../getting_started/">Getting Started</a></li><li class="is-active"><a class="tocitem" href>Workflow Guide</a><ul class="internal"><li><a class="tocitem" href="#Workflow-Architecture"><span>Workflow Architecture</span></a></li><li><a class="tocitem" href="#Creating-Workflow-Types"><span>Creating Workflow Types</span></a></li><li><a class="tocitem" href="#Defining-Workflow-Steps"><span>Defining Workflow Steps</span></a></li><li><a class="tocitem" href="#Implementing-Step-Functions"><span>Implementing Step Functions</span></a></li><li><a class="tocitem" href="#Workflow-Parameters"><span>Workflow Parameters</span></a></li><li><a class="tocitem" href="#Data-Flow-and-Directory-Structure"><span>Data Flow and Directory Structure</span></a></li><li><a class="tocitem" href="#Distributed-Processing"><span>Distributed Processing</span></a></li><li><a class="tocitem" href="#Advanced-Features"><span>Advanced Features</span></a></li><li><a class="tocitem" href="#Error-Handling"><span>Error Handling</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li><li><a class="tocitem" href="#Testing-Workflows"><span>Testing Workflows</span></a></li></ul></li><li><a class="tocitem" href="../provided_steps/">Provided Workflow Steps</a></li><li><a class="tocitem" href="../examples/">Examples</a></li><li><a class="tocitem" href="../api/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Workflow Guide</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Workflow Guide</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/csu-tropical/Sparrow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/csu-tropical/Sparrow.jl/blob/main/docs/src/workflow_guide.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Workflow-Guide"><a class="docs-heading-anchor" href="#Workflow-Guide">Workflow Guide</a><a id="Workflow-Guide-1"></a><a class="docs-heading-anchor-permalink" href="#Workflow-Guide" title="Permalink"></a></h1><p>This guide provides in-depth information on creating and managing workflows in Sparrow.jl.</p><h2 id="Workflow-Architecture"><a class="docs-heading-anchor" href="#Workflow-Architecture">Workflow Architecture</a><a id="Workflow-Architecture-1"></a><a class="docs-heading-anchor-permalink" href="#Workflow-Architecture" title="Permalink"></a></h2><p>A Sparrow workflow consists of three main components:</p><ol><li><strong>Workflow Type</strong>: A struct that holds configuration parameters</li><li><strong>Workflow Steps</strong>: Processing stages that transform data</li><li><strong>Step Functions</strong>: Implementations that perform the actual work</li></ol><h2 id="Creating-Workflow-Types"><a class="docs-heading-anchor" href="#Creating-Workflow-Types">Creating Workflow Types</a><a id="Creating-Workflow-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-Workflow-Types" title="Permalink"></a></h2><h3 id="Using-the-@workflow_type-Macro"><a class="docs-heading-anchor" href="#Using-the-@workflow_type-Macro">Using the @workflow_type Macro</a><a id="Using-the-@workflow_type-Macro-1"></a><a class="docs-heading-anchor-permalink" href="#Using-the-@workflow_type-Macro" title="Permalink"></a></h3><p>The <code>@workflow_type</code> macro creates a new workflow type that automatically:</p><ul><li>Inherits from <code>SparrowWorkflow</code></li><li>Implements the dictionary interface</li><li>Provides a keyword constructor</li></ul><pre><code class="language-julia hljs">@workflow_type MyWorkflow</code></pre><p>This expands to:</p><pre><code class="language-julia hljs">struct MyWorkflow &lt;: SparrowWorkflow
+    params::Dict{String,Any}
+end
+
+MyWorkflow(; kwargs...) = MyWorkflow(Dict{String,Any}(string(k) =&gt; v for (k, v) in kwargs))</code></pre><h3 id="Multiple-Workflow-Types"><a class="docs-heading-anchor" href="#Multiple-Workflow-Types">Multiple Workflow Types</a><a id="Multiple-Workflow-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Workflow-Types" title="Permalink"></a></h3><p>You can define multiple workflow types in the same file:</p><pre><code class="language-julia hljs">@workflow_types RadarQC RadarGrid RadarMerge</code></pre><h3 id="Manual-Workflow-Definition"><a class="docs-heading-anchor" href="#Manual-Workflow-Definition">Manual Workflow Definition</a><a id="Manual-Workflow-Definition-1"></a><a class="docs-heading-anchor-permalink" href="#Manual-Workflow-Definition" title="Permalink"></a></h3><p>For more control, you can define workflows manually:</p><pre><code class="language-julia hljs">struct CustomWorkflow &lt;: SparrowWorkflow
+    params::Dict{String,Any}
+    
+    function CustomWorkflow(; kwargs...)
+        params = Dict{String,Any}(string(k) =&gt; v for (k, v) in kwargs)
+        
+        # Add validation
+        if !haskey(params, &quot;required_param&quot;)
+            error(&quot;CustomWorkflow requires &#39;required_param&#39;&quot;)
+        end
+        
+        new(params)
+    end
+end</code></pre><h2 id="Defining-Workflow-Steps"><a class="docs-heading-anchor" href="#Defining-Workflow-Steps">Defining Workflow Steps</a><a id="Defining-Workflow-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-Workflow-Steps" title="Permalink"></a></h2><h3 id="Using-@workflow_step"><a class="docs-heading-anchor" href="#Using-@workflow_step">Using @workflow_step</a><a id="Using-@workflow_step-1"></a><a class="docs-heading-anchor-permalink" href="#Using-@workflow_step" title="Permalink"></a></h3><p>Steps are typically empty structs used for dispatch:</p><pre><code class="language-julia hljs">@workflow_step ConvertStep
+@workflow_step QCStep
+@workflow_step GridStep</code></pre><h3 id="Step-Ordering"><a class="docs-heading-anchor" href="#Step-Ordering">Step Ordering</a><a id="Step-Ordering-1"></a><a class="docs-heading-anchor-permalink" href="#Step-Ordering" title="Permalink"></a></h3><p>Steps are defined as an ordered list in your workflow instance:</p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;convert&quot;, ConvertStep, &quot;base_data&quot;, false),
+        (&quot;qc&quot;, QCStep, &quot;convert&quot;, false),
+        (&quot;grid&quot;, GridStep, &quot;qc&quot;, true)
+    ],
+    # ... other params
+)</code></pre><p>The order in the vector determines execution order. Each step receives output from the previous step as input.</p><h2 id="Implementing-Step-Functions"><a class="docs-heading-anchor" href="#Implementing-Step-Functions">Implementing Step Functions</a><a id="Implementing-Step-Functions-1"></a><a class="docs-heading-anchor-permalink" href="#Implementing-Step-Functions" title="Permalink"></a></h2><h3 id="Function-Signature"><a class="docs-heading-anchor" href="#Function-Signature">Function Signature</a><a id="Function-Signature-1"></a><a class="docs-heading-anchor-permalink" href="#Function-Signature" title="Permalink"></a></h3><p>Step functions must follow this signature:</p><pre><code class="language-julia hljs">function Sparrow.workflow_step(
+    workflow::YourWorkflowType,
+    ::Type{YourStepType},
+    input_dir::String,
+    output_dir::String;
+    step_name::String=&quot;&quot;,
+    step_num::Int=0,
+    kwargs...
+)
+    # Your implementation
+    return num_files_processed
+end</code></pre><h3 id="Parameters"><a class="docs-heading-anchor" href="#Parameters">Parameters</a><a id="Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Parameters" title="Permalink"></a></h3><ul><li><code>workflow</code>: Your workflow instance (access parameters via <code>workflow[&quot;key&quot;]</code>)</li><li><code>::Type{YourStepType}</code>: Step type for dispatch</li><li><code>input_dir</code>: Directory containing input files for this step</li><li><code>output_dir</code>: Directory where output files should be written</li><li><code>step_name</code>: Name of the step (from workflow definition)</li><li><code>step_num</code>: Step number in the workflow (1-indexed)</li><li><code>kwargs...</code>: Additional keyword arguments</li></ul><h3 id="Return-Value"><a class="docs-heading-anchor" href="#Return-Value">Return Value</a><a id="Return-Value-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Value" title="Permalink"></a></h3><p>Step functions should return the number of files processed (or 0 if no files were processed).</p><h3 id="Example-Implementation"><a class="docs-heading-anchor" href="#Example-Implementation">Example Implementation</a><a id="Example-Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Example-Implementation" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{ConvertStep},
+                               input_dir::String, output_dir::String;
+                               step_name::String=&quot;&quot;, step_num::Int=0, kwargs...)
+    
+    msg_info(&quot;Step $(step_num): $(step_name) - Converting files&quot;)
+    
+    # Create output directory
+    mkpath(output_dir)
+    
+    # Get workflow parameters
+    file_pattern = get_param(workflow, &quot;file_pattern&quot;, &quot;*.raw&quot;)
+    
+    # Find input files
+    input_files = readdir(input_dir; join=true)
+    filter!(f -&gt; occursin(Regex(file_pattern), f), input_files)
+    
+    # Process each file
+    processed_count = 0
+    for input_file in input_files
+        try
+            output_file = joinpath(output_dir, basename(input_file) * &quot;.nc&quot;)
+            
+            # Your processing logic
+            convert_radar_file(input_file, output_file)
+            
+            processed_count += 1
+            msg_debug(&quot;Converted $(basename(input_file))&quot;)
+        catch e
+            msg_warning(&quot;Failed to convert $(basename(input_file)): $(e)&quot;)
+        end
+    end
+    
+    msg_info(&quot;Processed $(processed_count) files in step $(step_name)&quot;)
+    return processed_count
+end</code></pre><h2 id="Workflow-Parameters"><a class="docs-heading-anchor" href="#Workflow-Parameters">Workflow Parameters</a><a id="Workflow-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Workflow-Parameters" title="Permalink"></a></h2><h3 id="Required-Parameters"><a class="docs-heading-anchor" href="#Required-Parameters">Required Parameters</a><a id="Required-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Required-Parameters" title="Permalink"></a></h3><p>These parameters are required for the workflow system to function:</p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    # Directory structure
+    base_working_dir = &quot;/path/to/temp&quot;,      # Temporary working directory
+    base_archive_dir = &quot;/path/to/archive&quot;,   # Archived/processed files
+    base_data_dir = &quot;/path/to/raw&quot;,          # Raw input data
+    
+    # Workflow definition
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        (&quot;step1&quot;, Step1Type, &quot;base_data&quot;, false),
+        (&quot;step2&quot;, Step2Type, &quot;step1&quot;, true)
+    ]
+)</code></pre><h3 id="Common-Optional-Parameters"><a class="docs-heading-anchor" href="#Common-Optional-Parameters">Common Optional Parameters</a><a id="Common-Optional-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Optional-Parameters" title="Permalink"></a></h3><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    # ... required params ...
+    
+    # Time handling
+    minute_span = 10,              # Process data in N-minute chunks
+    reverse = false,               # Process in reverse chronological order
+    
+    # Directories
+    base_plot_dir = &quot;/plots&quot;,      # Output plots directory
+    
+    # Radar-specific
+    raw_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;, &quot;WIDTH&quot;],
+    qc_moment_names = [&quot;DBZ&quot;, &quot;VEL&quot;],
+    moment_grid_type = [:linear, :linear, :log],
+    
+    # Logging
+    message_level = 2,             # 0=error, 1=warning, 2=info, 3=debug, 4=trace
+    
+    # Custom parameters
+    my_threshold = 10.0,
+    my_flag = true
+)</code></pre><h3 id="Accessing-Parameters"><a class="docs-heading-anchor" href="#Accessing-Parameters">Accessing Parameters</a><a id="Accessing-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Accessing-Parameters" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Direct access (throws error if key not found)
+value = workflow[&quot;parameter_name&quot;]
+
+# With default value
+value = get_param(workflow, &quot;parameter_name&quot;, default_value)
+
+# With type checking
+value = get_param(workflow, &quot;parameter_name&quot;, ExpectedType)</code></pre><h3 id="Adding-Parameters-Dynamically"><a class="docs-heading-anchor" href="#Adding-Parameters-Dynamically">Adding Parameters Dynamically</a><a id="Adding-Parameters-Dynamically-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-Parameters-Dynamically" title="Permalink"></a></h3><p>Since workflows behave like dictionaries:</p><pre><code class="language-julia hljs"># Add or update a parameter
+workflow[&quot;new_parameter&quot;] = &quot;value&quot;
+
+# Check if parameter exists
+if haskey(workflow.params, &quot;optional_param&quot;)
+    # Use it
+end</code></pre><h2 id="Data-Flow-and-Directory-Structure"><a class="docs-heading-anchor" href="#Data-Flow-and-Directory-Structure">Data Flow and Directory Structure</a><a id="Data-Flow-and-Directory-Structure-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Flow-and-Directory-Structure" title="Permalink"></a></h2><h3 id="Directory-Hierarchy"><a class="docs-heading-anchor" href="#Directory-Hierarchy">Directory Hierarchy</a><a id="Directory-Hierarchy-1"></a><a class="docs-heading-anchor-permalink" href="#Directory-Hierarchy" title="Permalink"></a></h3><p>Sparrow creates a structured directory hierarchy:</p><pre><code class="nohighlight hljs">base_working_dir/
+├── step1_convert/
+│   ├── 20240101_0000/
+│   ├── 20240101_0010/
+│   └── 20240101_0020/
+├── step2_qc/
+│   ├── 20240101_0000/
+│   └── ...
+└── step3_grid/
+    └── ...
+
+base_archive_dir/
+├── converted/
+├── qc/
+└── gridded/</code></pre><h3 id="Step-Input/Output"><a class="docs-heading-anchor" href="#Step-Input/Output">Step Input/Output</a><a id="Step-Input/Output-1"></a><a class="docs-heading-anchor-permalink" href="#Step-Input/Output" title="Permalink"></a></h3><p>Each step receives:</p><ul><li><code>input_dir</code>: Output directory from the previous step (or raw data for step 1)</li><li><code>output_dir</code>: A unique directory for this step&#39;s output</li></ul><p>The workflow system automatically:</p><ol><li>Creates output directories</li><li>Passes output of step N as input to step N+1</li><li>Archives final outputs</li></ol><h3 id="Time-Based-Processing"><a class="docs-heading-anchor" href="#Time-Based-Processing">Time-Based Processing</a><a id="Time-Based-Processing-1"></a><a class="docs-heading-anchor-permalink" href="#Time-Based-Processing" title="Permalink"></a></h3><p>When processing time-series data:</p><pre><code class="language-julia hljs">workflow = MyWorkflow(
+    minute_span = 10,
+    # ...
+)</code></pre><p>The workflow system:</p><ol><li>Divides the time range (start to end) into chunks</li><li>Processes each chunk sequentially or in parallel</li><li>Finds files matching each time window</li><li>Runs all steps for that time window</li></ol><h2 id="Distributed-Processing"><a class="docs-heading-anchor" href="#Distributed-Processing">Distributed Processing</a><a id="Distributed-Processing-1"></a><a class="docs-heading-anchor-permalink" href="#Distributed-Processing" title="Permalink"></a></h2><h3 id="Worker-Assignment"><a class="docs-heading-anchor" href="#Worker-Assignment">Worker Assignment</a><a id="Worker-Assignment-1"></a><a class="docs-heading-anchor-permalink" href="#Worker-Assignment" title="Permalink"></a></h3><p>Sparrow automatically distributes time chunks across workers:</p><pre><code class="language-julia hljs"># Workers are assigned file batches
+assign_workers(workflow)</code></pre><p>Files are queued and distributed to available workers as they complete tasks.</p><h3 id="Step-Function-on-Workers"><a class="docs-heading-anchor" href="#Step-Function-on-Workers">Step Function on Workers</a><a id="Step-Function-on-Workers-1"></a><a class="docs-heading-anchor-permalink" href="#Step-Function-on-Workers" title="Permalink"></a></h3><p>Your step functions run on worker processes. Important considerations:</p><ol><li><strong>Module Loading</strong>: Workflow files are loaded on all workers automatically</li><li><strong>Message Level</strong>: Set message level on workers for proper logging</li><li><strong>Shared Data</strong>: Workers have separate memory; use files for communication</li><li><strong>Error Handling</strong>: Return 0 or throw to signal failure</li></ol><h3 id="Worker-Specific-Code"><a class="docs-heading-anchor" href="#Worker-Specific-Code">Worker-Specific Code</a><a id="Worker-Specific-Code-1"></a><a class="docs-heading-anchor-permalink" href="#Worker-Specific-Code" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{MyStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    # Get worker ID
+    worker_id = myid()
+    msg_debug(&quot;Running on worker $(worker_id)&quot;)
+    
+    # Worker-specific logic
+    if nworkers() &gt; 1
+        msg_info(&quot;Distributed mode with $(nworkers()) workers&quot;)
+    end
+    
+    # Process files...
+end</code></pre><h2 id="Advanced-Features"><a class="docs-heading-anchor" href="#Advanced-Features">Advanced Features</a><a id="Advanced-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Features" title="Permalink"></a></h2><h3 id="Conditional-Steps"><a class="docs-heading-anchor" href="#Conditional-Steps">Conditional Steps</a><a id="Conditional-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Conditional-Steps" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{ConditionalStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    # Skip step based on condition
+    if !get_param(workflow, &quot;enable_advanced_qc&quot;, false)
+        msg_info(&quot;Skipping advanced QC (not enabled)&quot;)
+        return 0
+    end
+    
+    # Proceed with processing...
+end</code></pre><h3 id="Chaining-External-Tools"><a class="docs-heading-anchor" href="#Chaining-External-Tools">Chaining External Tools</a><a id="Chaining-External-Tools-1"></a><a class="docs-heading-anchor-permalink" href="#Chaining-External-Tools" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{RadxStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    mkpath(output_dir)
+    
+    for file in readdir(input_dir; join=true)
+        output_file = joinpath(output_dir, basename(file))
+        
+        # Call external tool
+        cmd = `RadxConvert -f $(file) -outdir $(output_dir) -outformat cfradial`
+        
+        try
+            run(cmd)
+            msg_debug(&quot;Converted $(basename(file))&quot;)
+        catch e
+            msg_error(&quot;RadxConvert failed on $(file): $(e)&quot;)
+            return 0
+        end
+    end
+    
+    return length(readdir(input_dir))
+end</code></pre><h3 id="Custom-File-Discovery"><a class="docs-heading-anchor" href="#Custom-File-Discovery">Custom File Discovery</a><a id="Custom-File-Discovery-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-File-Discovery" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{CustomDiscovery},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    # Custom pattern matching
+    pattern = get_param(workflow, &quot;file_pattern&quot;, r&quot;.*\.nc$&quot;)
+    
+    files = []
+    for (root, dirs, filenames) in walkdir(input_dir)
+        for filename in filenames
+            if occursin(pattern, filename)
+                push!(files, joinpath(root, filename))
+            end
+        end
+    end
+    
+    msg_info(&quot;Found $(length(files)) files matching pattern&quot;)
+    
+    # Process files...
+end</code></pre><h3 id="Metadata-Propagation"><a class="docs-heading-anchor" href="#Metadata-Propagation">Metadata Propagation</a><a id="Metadata-Propagation-1"></a><a class="docs-heading-anchor-permalink" href="#Metadata-Propagation" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{MetadataStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    mkpath(output_dir)
+    
+    # Read metadata from previous step
+    metadata_file = joinpath(input_dir, &quot;.metadata.json&quot;)
+    if isfile(metadata_file)
+        metadata = JSON.parsefile(metadata_file)
+        msg_debug(&quot;Loaded metadata: $(metadata)&quot;)
+    else
+        metadata = Dict()
+    end
+    
+    # Add metadata for this step
+    metadata[&quot;step_name&quot;] = get(kwargs, :step_name, &quot;&quot;)
+    metadata[&quot;processed_at&quot;] = now()
+    
+    # Process files...
+    
+    # Save updated metadata
+    output_metadata = joinpath(output_dir, &quot;.metadata.json&quot;)
+    open(output_metadata, &quot;w&quot;) do io
+        JSON.print(io, metadata, 2)
+    end
+    
+    return 1
+end</code></pre><h2 id="Error-Handling"><a class="docs-heading-anchor" href="#Error-Handling">Error Handling</a><a id="Error-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Error-Handling" title="Permalink"></a></h2><h3 id="Step-Level-Errors"><a class="docs-heading-anchor" href="#Step-Level-Errors">Step-Level Errors</a><a id="Step-Level-Errors-1"></a><a class="docs-heading-anchor-permalink" href="#Step-Level-Errors" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{SafeStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    processed = 0
+    errors = 0
+    
+    for file in readdir(input_dir; join=true)
+        try
+            # Process file
+            process_file(file, output_dir)
+            processed += 1
+        catch e
+            msg_warning(&quot;Failed to process $(basename(file)): $(e)&quot;)
+            errors += 1
+            
+            # Continue or abort?
+            if errors &gt; 10
+                msg_error(&quot;Too many errors, aborting step&quot;)
+                return 0
+            end
+        end
+    end
+    
+    msg_info(&quot;Processed $(processed) files, $(errors) errors&quot;)
+    return processed
+end</code></pre><h3 id="Validation"><a class="docs-heading-anchor" href="#Validation">Validation</a><a id="Validation-1"></a><a class="docs-heading-anchor-permalink" href="#Validation" title="Permalink"></a></h3><pre><code class="language-julia hljs">function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{ValidateStep},
+                               input_dir::String, output_dir::String;
+                               kwargs...)
+    
+    # Validate required parameters
+    required_params = [&quot;threshold&quot;, &quot;method&quot;, &quot;output_format&quot;]
+    for param in required_params
+        if !haskey(workflow.params, param)
+            msg_error(&quot;Missing required parameter: $(param)&quot;)
+            return 0
+        end
+    end
+    
+    # Validate input files exist
+    input_files = readdir(input_dir)
+    if isempty(input_files)
+        msg_warning(&quot;No input files found in $(input_dir)&quot;)
+        return 0
+    end
+    
+    # Proceed with processing...
+end</code></pre><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><ol><li><strong>Keep Steps Focused</strong>: Each step should do one thing well</li><li><strong>Use Message Levels Appropriately</strong>: Error for failures, warning for issues, info for progress</li><li><strong>Return Accurate Counts</strong>: Return the actual number of files processed</li><li><strong>Create Output Directories</strong>: Always <code>mkpath(output_dir)</code> before writing</li><li><strong>Handle Missing Files Gracefully</strong>: Empty input is often valid (skip processing)</li><li><strong>Validate Parameters Early</strong>: Check required parameters at step start</li><li><strong>Use Type Dispatch</strong>: Define step types for clear separation of concerns</li><li><strong>Document Your Steps</strong>: Add comments explaining complex logic</li><li><strong>Test Incrementally</strong>: Test each step independently before chaining</li><li><strong>Log Progress</strong>: Use debug/trace messages for detailed progress tracking</li></ol><h2 id="Testing-Workflows"><a class="docs-heading-anchor" href="#Testing-Workflows">Testing Workflows</a><a id="Testing-Workflows-1"></a><a class="docs-heading-anchor-permalink" href="#Testing-Workflows" title="Permalink"></a></h2><p>For information on testing workflows, see:</p><ul><li>Unit testing individual steps</li><li>Integration testing complete workflows</li><li>Generating test fixtures</li><li>Running tests locally and in CI</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../getting_started/">« Getting Started</a><a class="docs-footer-nextpage" href="../provided_steps/">Provided Workflow Steps »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 27 February 2026 03:40">Friday 27 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
