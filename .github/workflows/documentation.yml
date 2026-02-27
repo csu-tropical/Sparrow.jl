@@ -29,7 +29,7 @@ jobs:
         run: |
           using Pkg
           # Add unregistered dependencies
-          Pkg.develop(url="https://github.com/mmbell/Daisho.jl")
+          Pkg.develop(url="https://github.com/csu-tropical/Daisho.jl")
           Pkg.develop(url="https://github.com/csu-tropical/Ronin.jl")
           Pkg.develop(url="https://github.com/csu-tropical/Sparrow.jl")
           # Add current package for docs
