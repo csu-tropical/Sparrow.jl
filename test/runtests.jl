@@ -1,9 +1,9 @@
 using Test
 using Sparrow
 
-# Check if integration tests should be run
-# Set SPARROW_RUN_INTEGRATION_TESTS=1 to enable
+# Check if optional test suites should be run
 const RUN_INTEGRATION_TESTS = get(ENV, "SPARROW_RUN_INTEGRATION_TESTS", "0") == "1"
+const RUN_DISTRIBUTED_TESTS = get(ENV, "SPARROW_RUN_DISTRIBUTED_TESTS", "0") == "1"
 
 @testset "Sparrow.jl Basic Tests" begin
     
@@ -99,16 +99,34 @@ else
     end
 end
 
+# Distributed worker tests (spawn local workers, slower)
+if RUN_DISTRIBUTED_TESTS
+    @testset "Distributed Tests" begin
+        println("\nRunning distributed worker tests...")
+        include("test_distributed.jl")
+    end
+else
+    @testset "Distributed Tests (Skipped)" begin
+        println("\nDistributed tests skipped. Set SPARROW_RUN_DISTRIBUTED_TESTS=1 to enable.")
+        @test_skip true
+    end
+end
+
 println("\n" * "="^60)
 println("Test Summary:")
-println("  ✅ Basic unit tests: PASSED")
+println("  Basic unit tests: PASSED")
 if RUN_INTEGRATION_TESTS
-    println("  ✅ Integration tests: COMPLETED")
+    println("  Integration tests: COMPLETED")
 else
-    println("  ⏭️  Integration tests: SKIPPED")
-    println("\nTo run integration tests:")
-    println("  1. Generate test data: julia test/fixtures/generate_test_data.jl")
-    println("  2. Run: SPARROW_RUN_INTEGRATION_TESTS=1 julia --project -e 'using Pkg; Pkg.test()'")
+    println("  Integration tests: SKIPPED")
 end
+if RUN_DISTRIBUTED_TESTS
+    println("  Distributed tests: COMPLETED")
+else
+    println("  Distributed tests: SKIPPED")
+end
+println("\nTo run optional test suites:")
+println("  SPARROW_RUN_INTEGRATION_TESTS=1 julia --project -e 'using Pkg; Pkg.test()'")
+println("  SPARROW_RUN_DISTRIBUTED_TESTS=1 julia --project -e 'using Pkg; Pkg.test()'")
 println("="^60)
 println()
