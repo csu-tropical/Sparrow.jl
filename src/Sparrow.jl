@@ -29,6 +29,7 @@ export SparrowWorkflow, workflow_step, get_param
 export RadxConvertStep, RoninQCStep
 export GridRHIStep, GridCompositeStep, GridVolumeStep, GridLatlonStep, GridPPIStep, GridQVPStep
 export PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep, PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep
+export MergeVolumesStep, PiccoloMergeStep
 export PassThroughStep, filterByTimeStep
 export message, msg_error, msg_warning, msg_info, msg_debug, msg_trace
 export set_message_level, MSG_ERROR, MSG_WARNING, MSG_INFO, MSG_DEBUG, MSG_TRACE

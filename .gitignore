@@ -9,3 +9,4 @@ docs/build/
 # Test artifacts
 /tmp/
 *.log
+test/fixtures/data/

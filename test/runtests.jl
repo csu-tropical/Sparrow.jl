@@ -90,6 +90,10 @@ end
     include("test_plot_steps.jl")
 end
 
+@testset "Utility Functions" begin
+    include("test_utility.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin

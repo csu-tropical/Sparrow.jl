@@ -19,10 +19,10 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{filterByTimeStep}, inpu
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
     for input_file in input_files
-        scan_start = get_scan_start(file)
-        msg_debug("Checking $file at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
+        scan_start = get_scan_start(input_file)
+        msg_debug("Checking $(input_file) at $(Dates.format(scan_start, "YYYYmmdd HHMM"))")
         if scan_start < start_time || scan_start >= stop_time
-            msg_debug("Skipping $file")
+            msg_debug("Skipping $(input_file)")
             continue
         else
             output_file = replace(input_file, input_dir => output_dir)
@@ -31,42 +31,35 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{filterByTimeStep}, inpu
     end
 end
 
+"""
+    get_scan_start(file) → DateTime
+
+Get the start time of a radar scan file using RadxPrint.
+
+Works with any file format supported by RadxPrint (CfRadial, Sigmet, DORADE,
+UF, and 30+ other radar formats). Requires `RadxPrint` to be available on PATH.
+
+# Arguments
+- `file`: Path to a radar data file
+
+# Returns
+- `DateTime` of the scan start time
+
+# Example
+```julia
+scan_time = get_scan_start("/path/to/cfrad.20240101_120000.nc")
+```
+"""
 function get_scan_start(file)
-    if basename(file)[1:6] == "cfrad."
-        # Assumes CfRadial files with names like "cfrad.YYYYmmdd_HHMMSS.ms_to_YYYYmmdd_HHMMSS.ms_radar_scantype.nc"
-        return DateTime(parse(Int64, basename(file)[7:10]),
-            parse(Int64, basename(file)[11:12]),
-            parse(Int64, basename(file)[13:14]),
-            parse(Int64, basename(file)[16:17]),
-            parse(Int64, basename(file)[18:19]))
-    elseif basename(file)[1:3] == "SEA"
-        # Assumes Sigmet files with names like "SEAYYYYmmdd_HHMMSS"
-        return DateTime(parse(Int64, basename(file)[4:7]),
-            parse(Int64, basename(file)[8:9]),
-            parse(Int64, basename(file)[10:11]),
-            parse(Int64, basename(file)[13:14]),
-            parse(Int64, basename(file)[15:16]))
-    elseif occursin(r"RAW", basename(file))
-        # Assumes P3 files with names like "2TS220918150850.RAWEHHV"
-        # Have to use RadxPrint
-        msg_debug("Parsing RAW file: $(basename(file))")
-        flush(stdout)
-        try
-            cmd_output = readchomp(pipeline(`RadxPrint -meta_only -f $file`, `grep startTimeSecs`))
-            msg_trace("RadxPrint output: '$cmd_output'")
-            flush(stdout)
-            if length(cmd_output) >= 18
-                start_time_secs = DateTime(cmd_output[18:end], dateformat"YYYY/mm/dd HH:MM:SS")
-                return start_time_secs
-            else
-                msg_error("RadxPrint output too short: '$cmd_output'")
-            end
-        catch e
-            msg_warning("Error running RadxPrint on $file: $e")
-            flush(stdout)
-            rethrow(e)
+    try
+        cmd_output = readchomp(pipeline(`RadxPrint -meta_only -f $file`, `grep startTimeSecs`))
+        if length(cmd_output) >= 18
+            return DateTime(cmd_output[18:end], dateformat"YYYY/mm/dd HH:MM:SS")
+        else
+            msg_error("RadxPrint output too short for $file: '$cmd_output'")
         end
-    else
-        msg_error("Unknown file format for $(basename(file))")
+    catch e
+        msg_warning("Error running RadxPrint on $file: $e")
+        rethrow(e)
     end
 end
