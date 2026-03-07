@@ -62,7 +62,7 @@ function setup_workers(parsed_args)
             qsub_flags=`-q all.q -pe mpi $(num_threads) -m $(email_flags) -M $(email_address)`)
     elseif parsed_args["slurm"]
         msg_info("Initializing Sparrow on Slurm with $(num_workers) workers and $(Threads.nthreads()) threads")
-        addprocs(SlurmManager())
+        addprocs(SlurmClusterManager.SlurmManager())
     else
         msg_info("Initializing Sparrow locally with $(num_workers) workers and $(Threads.nthreads()) threads")
         addprocs(num_workers)

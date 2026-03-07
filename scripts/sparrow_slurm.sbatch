@@ -78,7 +78,6 @@ ${JULIA_BIN} --project="${SPARROW_PROJECT}" \
     --threads=${JULIA_NUM_THREADS} \
     -e '
     using Sparrow
-    include(ARGS[1])
     parsed_args = Sparrow.parse_arguments([
         ARGS[1],
         "--slurm",
@@ -89,7 +88,7 @@ ${JULIA_BIN} --project="${SPARROW_PROJECT}" \
         "--verbose", ARGS[6],
         ARGS[7:end]...
     ])
-    Sparrow.main(workflow, parsed_args)
+    Sparrow.main(parsed_args)
     ' \
     "${WORKFLOW_FILE}" \
     "${SLURM_NTASKS}" \

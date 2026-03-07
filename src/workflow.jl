@@ -131,6 +131,9 @@ MyWorkflow(; kwargs...) = MyWorkflow(Dict{String,Any}(string(k) => v for (k, v) 
 - [`@workflow_step`](@ref)
 """
 macro workflow_type(name)
+    if isdefined(__module__, name)
+        return nothing
+    end
     return quote
         struct $(esc(name)) <: SparrowWorkflow
             params::Dict{String,Any}
@@ -158,12 +161,14 @@ Equivalent to calling [`@workflow_type`](@ref) for each type individually.
 macro workflow_types(names...)
     exprs = []
     for name in names
-        push!(exprs, quote
-            struct $(esc(name)) <: SparrowWorkflow
-                params::Dict{String,Any}
-            end
-            $(esc(name))(; kwargs...) = $(esc(name))(Dict{String,Any}(string(k) => v for (k, v) in kwargs))
-        end)
+        if !isdefined(__module__, name)
+            push!(exprs, quote
+                struct $(esc(name)) <: SparrowWorkflow
+                    params::Dict{String,Any}
+                end
+                $(esc(name))(; kwargs...) = $(esc(name))(Dict{String,Any}(string(k) => v for (k, v) in kwargs))
+            end)
+        end
     end
     return Expr(:block, exprs...)
 end
@@ -197,6 +202,9 @@ struct ConvertData end
 - [`workflow_step`](@ref)
 """
 macro workflow_step(name)
+    if isdefined(__module__, name)
+        return nothing
+    end
     return quote
         struct $(esc(name)) end
     end
