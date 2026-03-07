@@ -5,24 +5,29 @@ authors = ["Michael Bell <mmbell@colostate.edu> and contributors"]
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ClusterManagers = "34f1f09b-3a8b-5176-ab39-66d58a4d544e"
-ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
 Daisho = "0095e6a3-0a19-4629-8616-db2ab031b187"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 DistributedData = "f6a0035f-c5ac-4ad0-b410-ad102ced35df"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
-GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
-Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Ronin = "905eca60-9fa9-4fb3-8835-f5cd63a3719c"
 SlurmClusterManager = "c82cd089-7bf7-41d7-976b-6b5d413cbe0a"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[weakdeps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
+GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
+Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[extensions]
+SparrowPlotExt = ["CairoMakie", "GeoMakie", "ColorSchemes", "Images"]
 
 [compat]
 ArgParse = "1.2.0"

@@ -86,6 +86,10 @@ const RUN_DISTRIBUTED_TESTS = get(ENV, "SPARROW_RUN_DISTRIBUTED_TESTS", "0") == 
     println("\n✅ All basic tests passed!")
 end
 
+@testset "Plot Steps" begin
+    include("test_plot_steps.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin

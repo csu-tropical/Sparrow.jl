@@ -12,9 +12,6 @@ using Distributed, DistributedData
 using ClusterManagers, SlurmClusterManager
 using Random
 using Statistics
-using ColorSchemes
-using Makie, GeoMakie, CairoMakie
-using Images
 using ArgParse
 using NCDatasets, JLD2
 
@@ -23,7 +20,7 @@ include("workflow.jl")
 include("io.jl")
 include("qc.jl")
 include("merge.jl")
-include("plot.jl")
+include("plot_steps.jl")
 include("grid.jl")
 include("utility.jl")
 
@@ -31,6 +28,7 @@ export @workflow_type, @workflow_step, assign_workers, run_workflow, process_wor
 export SparrowWorkflow, workflow_step, get_param
 export RadxConvertStep, RoninQCStep
 export GridRHIStep, GridCompositeStep, GridVolumeStep, GridLatlonStep, GridPPIStep, GridQVPStep
+export PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep, PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep
 export PassThroughStep, filterByTimeStep
 export message, msg_error, msg_warning, msg_info, msg_debug, msg_trace
 export set_message_level, MSG_ERROR, MSG_WARNING, MSG_INFO, MSG_DEBUG, MSG_TRACE
