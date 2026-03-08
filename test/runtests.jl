@@ -94,6 +94,14 @@ end
     include("test_utility.jl")
 end
 
+@testset "Realtime Helpers" begin
+    include("test_realtime.jl")
+end
+
+@testset "Data Sources" begin
+    include("test_data_sources.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin

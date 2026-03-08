@@ -70,4 +70,12 @@ function setup_workers(parsed_args)
 
     # Load Sparrow on all workers
     @eval @everywhere using Sparrow
+
+    # Load plot extension on workers if available on the main process.
+    # Must eval in Main on each worker — using from within Sparrow's module
+    # context fails because CairoMakie is a weakdep, not a dep.
+    if Base.get_extension(Sparrow, :SparrowPlotExt) !== nothing
+        @everywhere Main.eval(:(using CairoMakie, GeoMakie, ColorSchemes, Images))
+        msg_info("Plot extension loaded on all workers")
+    end
 end

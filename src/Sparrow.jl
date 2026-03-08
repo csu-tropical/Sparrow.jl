@@ -7,7 +7,7 @@ module Sparrow
 using Daisho, Ronin
 using Dates, NCDatasets
 using Printf
-using FileWatching
+using Downloads
 using Distributed, DistributedData
 using ClusterManagers, SlurmClusterManager
 using Random
@@ -16,6 +16,7 @@ using ArgParse
 using NCDatasets, JLD2
 
 include("driver.jl")
+include("data_sources.jl")
 include("workflow.jl")
 include("io.jl")
 include("qc.jl")
@@ -26,6 +27,9 @@ include("utility.jl")
 
 export @workflow_type, @workflow_step, assign_workers, run_workflow, process_workflow
 export SparrowWorkflow, workflow_step, get_param
+export DataSource, LocalDirSource, S3BucketSource, HTTPDirSource
+export discover_files, fetch_file, is_remote, has_data, get_data_source
+export poll_directory
 export RadxConvertStep, RoninQCStep
 export GridRHIStep, GridCompositeStep, GridVolumeStep, GridLatlonStep, GridPPIStep, GridQVPStep
 export PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep, PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep
@@ -77,6 +81,16 @@ function main(parsed_args)
         msg_level = get_param(workflow, "message_level", MSG_INFO)
         set_message_level(msg_level)
         msg_debug("Setting verbosity level to $(msg_level) based on workflow parameter")
+    end
+
+    # Try to load plot extension packages if available
+    try
+        @eval Main begin
+            using CairoMakie, GeoMakie, ColorSchemes, Images
+        end
+        msg_info("Plot extension loaded")
+    catch
+        msg_debug("Plot extension packages not available, plot steps will be skipped")
     end
 
     # Setup distributed workers

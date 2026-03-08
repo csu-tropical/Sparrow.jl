@@ -51,18 +51,38 @@ end
 
 function link_base_data(date, workflow, raw_working_dir)
 
-    base_data_dir = workflow["base_data_dir"]
     base_archive_dir = workflow["base_archive_dir"]
     force_reprocess = workflow["force_reprocess"]
-    data_files = readdir("$(base_data_dir)/$(date)"; join=true)
-    filter!(!isdir,data_files)
-    for file in data_files
-        if force_reprocess || !check_processed(workflow, file, base_archive_dir)
-            target = file
-            link = raw_working_dir * "/" * basename(file)
-            symlink(target,link)
-        else
-            msg_debug("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
+    source = get_data_source(workflow)
+
+    if is_remote(source)
+        # Remote source: download files into working directory
+        remote_files = discover_files(source, date)
+        for filename in remote_files
+            fname = basename(filename)
+            if force_reprocess || !check_processed(workflow, fname, base_archive_dir)
+                try
+                    fetch_file(source, fname, raw_working_dir, date)
+                catch e
+                    msg_warning("Failed to fetch $fname: $e")
+                end
+            else
+                msg_debug("File $fname already processed by $(typeof(workflow)), skipping...")
+            end
+        end
+    else
+        # Local source: symlink files
+        base_data_dir = source.base_dir
+        data_files = readdir("$(base_data_dir)/$(date)"; join=true)
+        filter!(!isdir, data_files)
+        for file in data_files
+            if force_reprocess || !check_processed(workflow, file, base_archive_dir)
+                target = file
+                link = raw_working_dir * "/" * basename(file)
+                symlink(target, link)
+            else
+                msg_debug("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
+            end
         end
     end
 end

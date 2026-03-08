@@ -94,6 +94,20 @@ function get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) where {T}
 end
 
 """
+    get_data_source(workflow::SparrowWorkflow) → DataSource
+
+Get the data source for a workflow. If `data_source` is set in the workflow
+parameters, return it. Otherwise, create a `LocalDirSource` from `base_data_dir`.
+"""
+function get_data_source(workflow::SparrowWorkflow)
+    if haskey(workflow.params, "data_source")
+        return workflow["data_source"]::DataSource
+    else
+        return LocalDirSource(workflow["base_data_dir"])
+    end
+end
+
+"""
     @workflow_type Name
 
 Create a new workflow type that inherits from [`SparrowWorkflow`](@ref).
@@ -350,6 +364,147 @@ end
 
 # Main function to process radar data
 """
+    poll_directory(raw_dir::String) → Vector{String}
+
+Read a directory and return files (not directories or hidden files), newest first.
+Returns basenames. Wrapped in try/catch for NFS resilience.
+"""
+function poll_directory(raw_dir::String)
+    try
+        entries = readdir(raw_dir)
+        filter!(entries) do name
+            fullpath = joinpath(raw_dir, name)
+            !isdir(fullpath) && !startswith(name, ".")
+        end
+        return reverse(entries)
+    catch e
+        msg_warning("Error reading directory $raw_dir: $e")
+        return String[]
+    end
+end
+
+"""
+    check_and_fetch_task!(tasks, filequeue, t, workflow, archive_dir) → Symbol
+
+Check the status of task slot `t`. Returns:
+- `:open` — slot is unassigned or idle
+- `:running` — task is still running
+- `:ready` — task future is ready (completed or errored), slot cleared
+- `:processed` — file shows as processed in archive, slot cleared
+"""
+function check_and_fetch_task!(tasks, filequeue, t, workflow, archive_dir)
+    if !isassigned(tasks, t) || filequeue[t] == "none"
+        return :open
+    end
+
+    # Non-blocking check if the task future is ready
+    if isready(tasks[t])
+        try
+            status = fetch(tasks[t])
+            msg_info("Task $t completed: $status at $(now(UTC))")
+        catch e
+            msg_warning("Task $t errored: $e at $(now(UTC))")
+        end
+        flush(stdout)
+        filequeue[t] = "none"
+        return :ready
+    end
+
+    # Check if the file shows as processed in the archive
+    if check_processed(workflow, filequeue[t], archive_dir)
+        msg_info("Clearing finished task $t at $(now(UTC))")
+        try
+            status = fetch(tasks[t])
+            msg_info("Task $t $status at $(now(UTC))")
+        catch e
+            msg_warning("Error fetching task $t: $e at $(now(UTC))")
+        end
+        flush(stdout)
+        filequeue[t] = "none"
+        return :processed
+    end
+
+    return :running
+end
+
+"""
+    assign_to_slot!(tasks, filequeue, t, file, workflow) → Nothing
+
+Assign `file` to task slot `t` and start processing on the corresponding worker.
+"""
+function assign_to_slot!(tasks, filequeue, t, file, workflow)
+    filequeue[t] = file
+    tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
+    msg_info("$file assigned to task slot $t at $(now(UTC))")
+    flush(stdout)
+    return nothing
+end
+
+"""
+    find_open_slot!(tasks, filequeue, file, workflow, archive_dir) → Int
+
+Scan all task slots, clearing finished ones via `check_and_fetch_task!`.
+If an open slot is found, assign the file and return the slot index.
+Returns -1 if no slot is available.
+"""
+function find_open_slot!(tasks, filequeue, file, workflow, archive_dir)
+    for t in 1:length(tasks)
+        slot_status = check_and_fetch_task!(tasks, filequeue, t, workflow, archive_dir)
+        if slot_status != :running
+            assign_to_slot!(tasks, filequeue, t, file, workflow)
+            return t
+        end
+    end
+    return -1
+end
+
+"""
+    wait_for_slot!(tasks, filequeue, file, workflow, archive_dir, timeout) → Int
+
+Block with `sleep(1)` polling until a task slot opens or `timeout` seconds elapse.
+Logs progress every 60 seconds. Returns slot index or -1 on timeout.
+"""
+function wait_for_slot!(tasks, filequeue, file, workflow, archive_dir, timeout)
+    msg_info("Queue full, waiting to schedule $file")
+    flush(stdout)
+    waiting_time = 0
+    while waiting_time < timeout
+        if waiting_time % 60 == 0
+            msg_info("Waited $waiting_time seconds for a slot...")
+            flush(stdout)
+        end
+        for t in 1:length(tasks)
+            slot_status = check_and_fetch_task!(tasks, filequeue, t, workflow, archive_dir)
+            if slot_status != :running
+                assign_to_slot!(tasks, filequeue, t, file, workflow)
+                msg_info("Task slot $t opened up for $file at $(now(UTC))")
+                return t
+            end
+        end
+        sleep(1)
+        waiting_time += 1
+    end
+    return -1
+end
+
+"""
+    clear_finished_tasks!(tasks, filequeue, workflow, archive_dir) → Int
+
+End-of-cycle cleanup: check all slots and clear any that have finished.
+Returns the number of slots cleared.
+"""
+function clear_finished_tasks!(tasks, filequeue, workflow, archive_dir)
+    cleared = 0
+    for t in 1:length(tasks)
+        status = check_and_fetch_task!(tasks, filequeue, t, workflow, archive_dir)
+        if status in (:ready, :processed)
+            cleared += 1
+        end
+    end
+    return cleared
+end
+
+"""
     assign_workers(workflow::SparrowWorkflow)
 
 Distribute files across available workers for parallel processing.
@@ -364,13 +519,10 @@ Files are organized by time windows and assigned to workers as they become avail
 - Workers must be initialized (via `addprocs` or cluster manager)
 - Workflow must be loaded on all workers
 
-# Description
-This function:
-1. Discovers files in the specified time range
-2. Divides them into time-based chunks
-3. Distributes chunks across workers
-4. Monitors worker progress
-5. Handles worker failures
+# Configurable Parameters (via workflow)
+- `poll_interval` (default 5): Seconds between polling cycles
+- `queue_timeout` (default 600): Max seconds to wait for a queue slot
+- `retry_on_failure` (default false): If true, requeue timed-out files
 
 # See Also
 - [`process_workflow`](@ref)
@@ -379,12 +531,10 @@ This function:
 function assign_workers(workflow::SparrowWorkflow)
 
     msg_info("Processing data with $(typeof(workflow))...")
-    base_data_dir = workflow["base_data_dir"]
     base_archive_dir = workflow["base_archive_dir"]
 
     # Process a time period of radar data
     if !workflow["realtime"]
-        # Process using the datetime provided in the arguments
         try
             wait(get_from(workers()[1], :(process_workflow($(workflow)))))
         catch e
@@ -393,186 +543,87 @@ function assign_workers(workflow::SparrowWorkflow)
             return false
         end
     else
-        # Process realtime loop
+        # Configurable parameters with backward-compatible defaults
+        poll_interval = get_param(workflow, "poll_interval", 5)
+        queue_timeout = get_param(workflow, "queue_timeout", 600)
+        retry_on_failure = get_param(workflow, "retry_on_failure", false)
+
+        # Get data source (LocalDirSource if not explicitly set)
+        source = get_data_source(workflow)
+
         msg_info("Watching for real time data...")
         flush(stdout)
-        status = "Starting"
-        # Allow up to num_workers parallel processes to occur simultaneously
+
         num_workers = length(workers())
         tasks = Array{Distributed.Future}(undef, num_workers)
-        filequeue = fill("none", length(tasks))
-        # Implement some time limits on tasks to check on them
-        timequeue = fill(now(UTC), length(tasks))
+        filequeue = fill("none", num_workers)
+        retry_queue = String[]
+
         while true
-            radar_date = Dates.format(now(UTC), "YYYYmmdd")
-            raw_dir = joinpath(base_data_dir, radar_date)
-            # Check to make sure directory exists
-            mkpath(raw_dir)
-            raw_files = readdir(raw_dir)
-            filter!(!isdir, raw_files)
-            msg_trace("Checking for new data at $(now(UTC))...")
-            #flush(stdout)
-            for file in reverse(raw_files)
-                msg_trace("Checking $file...")
-                #flush(stdout)
-                # Skip if it is hidden file, which means rsync is still writing, or if it is already in the queue
-                if startswith(file, ".")
-                    continue
+            try
+                radar_date = Dates.format(now(UTC), "YYYYmmdd")
+
+                # Get files to process: retry queue first, then new files
+                files_to_process = String[]
+                if retry_on_failure && !isempty(retry_queue)
+                    append!(files_to_process, retry_queue)
+                    empty!(retry_queue)
                 end
 
-                # Check if the file is already processed
-                if check_processed(workflow, file, base_archive_dir)
-                    msg_trace("$file already processed, skipping...")
-                    #flush(stdout)
-                    continue
-                elseif (file in filequeue)
-                    msg_trace("$file is in the queue and being processed...")
-                    #flush(stdout)
-                    continue
+                if is_remote(source)
+                    new_files = [basename(f) for f in discover_files(source, radar_date)]
+                else
+                    raw_dir = joinpath(source.base_dir, radar_date)
+                    mkpath(raw_dir)
+                    new_files = poll_directory(raw_dir)
                 end
+                append!(files_to_process, new_files)
 
-                # File is not hidden and has not been processed so try to schedule it
-                if !(file in filequeue)
-                    # Found some data to process
+                msg_trace("Checking for new data at $(now(UTC))...")
+
+                for file in files_to_process
+                    # Skip hidden files, already processed, or already queued
+                    if startswith(file, ".")
+                        continue
+                    end
+                    if check_processed(workflow, file, base_archive_dir)
+                        msg_trace("$file already processed, skipping...")
+                        continue
+                    end
+                    if file in filequeue
+                        msg_trace("$file is in the queue, skipping...")
+                        continue
+                    end
+
                     msg_debug("New file detected: $file")
                     msg_debug("Current queue: $filequeue")
                     flush(stdout)
-                    # Find an open task slot
-                    for t in 1:length(tasks)
-                        if !isassigned(tasks, t) || filequeue[t] == "none"
-                            # Found an open task slot so start processing
-                            filequeue[t] = file
-                            tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                            msg_info("$file being processed in empty task slot $t at $(now(UTC))")
-                            flush(stdout)
-                            break
-                        elseif isassigned(tasks, t) && filequeue[t] != "none"
-                            # Non-blocking check if the task errored
-                            if isready(tasks[t])
-                                try
-                                    status = fetch(tasks[t])
-                                    msg_info("Task $t $status at $(now(UTC))")
-                                catch e
-                                    msg_warning("Task $t errored: $e at $(now(UTC))")
-                                end
-                                flush(stdout)
-                                filequeue[t] = file
-                                tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                                msg_info("$file took over task slot $t at $(now(UTC))")
-                                flush(stdout)
-                                break
-                            elseif check_processed(workflow, filequeue[t], base_archive_dir)
-                                # Check if the previous task is done processing, and if so clear it from the filequeue and assign new file
-                                msg_info("Clearing task $t at $(now(UTC))")
-                                try
-                                    status = fetch(tasks[t])
-                                catch e
-                                    msg_warning("Error $e fetching task $t status at $(now(UTC))")
-                                    flush(stdout)
-                                end
-                                msg_info("Task $t $status at $(now(UTC))")
-                                filequeue[t] = file
-                                tasks[t] = get_from(workers()[t], :(process_workflow($(workflow))))
-                                msg_info("$file took over task slot $t at $(now(UTC))")
-                                flush(stdout)
-                                break
+
+                    # Try to find an open slot
+                    slot = find_open_slot!(tasks, filequeue, file, workflow, base_archive_dir)
+                    if slot == -1
+                        # All slots busy — wait for one to open
+                        slot = wait_for_slot!(tasks, filequeue, file, workflow, base_archive_dir, queue_timeout)
+                        if slot == -1
+                            if retry_on_failure
+                                push!(retry_queue, file)
+                                msg_warning("No slots opened in $(queue_timeout)s, requeueing $file")
+                            else
+                                msg_warning("No slots opened in $(queue_timeout)s! Skipping $file")
                             end
                         end
                     end
                 end
 
-                # Check if the file was successfully queued or queue is full
-                if !(file in filequeue)
-                    # Queue is full, wait for the first task to finish
-                    msg_info("Queue full, waiting to schedule $file")
-                    flush(stdout)
-                    free_task = -1
-                    waiting_time = 0
-                    while free_task == -1 && waiting_time < 600
-                        if waiting_time % 60 == 0
-                            msg_info("Waited $waiting_time seconds...")
-                            flush(stdout)
-                        end
-                        for t in 1:length(tasks)
-                            # Non-blocking check if task errored
-                            if isready(tasks[t])
-                                try
-                                    status = fetch(tasks[t])
-                                    msg_info("Task $t completed: $status at $(now(UTC))")
-                                catch e
-                                    msg_warning("Task $t errored: $e at $(now(UTC))")
-                                end
-                                flush(stdout)
-                                filequeue[t] = file
-                                free_task = t
-                                break
-                            elseif check_processed(workflow, filequeue[t], base_archive_dir)
-                                msg_info("Fetching status on task $t at $(now(UTC))")
-                                try
-                                    status = fetch(tasks[t])
-                                catch e
-                                    msg_warning("Error $e fetching task $t at $(now(UTC))")
-                                    flush(stdout)
-                                end
-                                msg_info("Task $t $status at $(now(UTC))")
-                                flush(stdout)
-                                filequeue[t] = file
-                                free_task = t
-                                break
-                            end
-                        end
-                        if free_task == -1
-                            # Wait for a bit for things to finish
-                            sleep(1)
-                            waiting_time += 1
-                        end
-                    end
-                    if free_task != -1
-                        tasks[free_task] = get_from(workers()[free_task], :(process_workflow($(workflow))))
-                        msg_info("Task slot $free_task opened up for $file at $(now(UTC)), processing...")
-                        break
-                    else
-                        msg_warning("No task slots opened up in 10 minutes! Skipping $file and moving on")
-                    end
-                end
+                # End-of-cycle cleanup
+                clear_finished_tasks!(tasks, filequeue, workflow, base_archive_dir)
+
+            catch e
+                msg_warning("Error in realtime polling loop: $e")
+                flush(stdout)
             end
 
-            # Made it to the end of the file checking loop, clear the queue if we can
-            for t in 1:length(tasks)
-                if !isassigned(tasks, t) || filequeue[t] == "none"
-                    continue
-                end
-
-                # Non-blocking check if the task has completed or errored
-                if isready(tasks[t])
-                    try
-                        status = fetch(tasks[t])
-                        msg_info("Task $t completed with status: $status at $(now(UTC))")
-                        flush(stdout)
-                    catch e
-                        msg_warning("Task $t errored: $e at $(now(UTC))")
-                        flush(stdout)
-                    end
-                    # Either way, clear the slot
-                    filequeue[t] = "none"
-                elseif check_processed(workflow, filequeue[t], base_archive_dir)
-                    # Task isn't ready yet but file shows as processed
-                    msg_info("Fetching status on task $t at $(now(UTC))")
-                    flush(stdout)
-                    try
-                        status = fetch(tasks[t])
-                    catch e
-                        msg_warning("Error $e fetching task $t at $(now(UTC))")
-                        flush(stdout)
-                    end
-                    msg_info("Task $t $status at $(now(UTC))")
-                    flush(stdout)
-                    filequeue[t] = "none"
-                end
-            end
-
-            # Wait for a bit before checking again
-            sleep(5)
+            sleep(poll_interval)
         end
     end
 
@@ -624,6 +675,9 @@ function process_workflow(workflow::SparrowWorkflow)
     month = datetime[5:6]
     day = datetime[7:8]
 
+    # Get data source for checking data availability
+    source = get_data_source(workflow)
+
     processed_files = []
     archived_files = []
     if length(datetime) == 6
@@ -637,8 +691,8 @@ function process_workflow(workflow::SparrowWorkflow)
         end
         for d in dayrange
             day = base_datetime + Dates.Day(d)
-            # Check to see if date exists in the base data directory, and if not skip to the next day
-            if !isdir(joinpath(workflow["base_data_dir"], Dates.format(day, "YYYYmmdd")))
+            # Check to see if date exists via data source, and if not skip to the next day
+            if !has_data(source, Dates.format(day, "YYYYmmdd"))
                 msg_info("No data for $(Dates.format(day, "YYYYmmdd")), skipping...")
                 flush(stdout)
                 continue
@@ -662,8 +716,8 @@ function process_workflow(workflow::SparrowWorkflow)
         # Process the whole day in minute_span chunks
         msg_info("Processing one day...")
         flush(stdout)
-        if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
-            msg_info("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+        if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
+            msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
             flush(stdout)
             return "not processed due to missing data"
         end
@@ -684,8 +738,8 @@ function process_workflow(workflow::SparrowWorkflow)
         hr = datetime[10:11]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr))
         msg_info("Processing one hour...")
-        if !isdir(joinpath(workflow["base_data_dir"], Dates.format(base_datetime, "YYYYmmdd")))
-            msg_info("No data for $(Dates.format(day, "YYYYmmdd")), nothing to do...")
+        if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
+            msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
             flush(stdout)
             return "not processed due to missing data"
         end
@@ -804,12 +858,12 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
     input_dir = joinpath(temp_dir, input_name, date)
     output_dir = joinpath(temp_dir, step_name, date)
 
-    if hasmethod(workflow_step, (typeof(workflow), Type{step_type}, String, String))
+    if hasmethod(workflow_step, Tuple{typeof(workflow), Type{step_type}, String, String})
         msg_info("Running $(typeof(workflow)) workflow step $(step_num): $(step_name)")
         flush(stdout)
         workflow_step(workflow, step_type, input_dir, output_dir;
                      step_name=step_name, step_num=step_num, start_time=start_time, stop_time=stop_time)
-    elseif hasmethod(workflow_step, (workflow::SparrowWorkflow, Type{step_type}, String, String))
+    elseif hasmethod(workflow_step, Tuple{SparrowWorkflow, Type{step_type}, String, String})
         msg_info("Running Sparrow provided step $(step_num): $(step_name)")
         flush(stdout)
         workflow_step(workflow, step_type, input_dir, output_dir;

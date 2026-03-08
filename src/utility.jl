@@ -56,10 +56,11 @@ function get_scan_start(file)
         if length(cmd_output) >= 18
             return DateTime(cmd_output[18:end], dateformat"YYYY/mm/dd HH:MM:SS")
         else
-            msg_error("RadxPrint output too short for $file: '$cmd_output'")
+            msg_warning("RadxPrint output too short for $file: '$cmd_output'")
         end
     catch e
         msg_warning("Error running RadxPrint on $file: $e")
-        rethrow(e)
     end
+    # Return a far-past date so callers' time-window filters skip this file
+    return DateTime(1970, 1, 1)
 end
