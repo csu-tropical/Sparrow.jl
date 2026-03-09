@@ -679,7 +679,7 @@ function process_workflow(workflow::SparrowWorkflow)
     archived_files = []
     if length(datetime) == 6
         # Process a whole month
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
+        base_datetime = DateTime(parse(Int64, year), parse(Int64, month))
         msg_info("Processing one month...")
         flush(stdout)
         dayrange = 0:30
