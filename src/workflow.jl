@@ -669,7 +669,6 @@ function process_workflow(workflow::SparrowWorkflow)
     if length(datetime) < 6
         msg_error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
     end
-    date = datetime[1:8] #YYYYmmdd
     year = datetime[1:4]
     month = datetime[5:6]
 
