@@ -669,11 +669,9 @@ function process_workflow(workflow::SparrowWorkflow)
     if length(datetime) < 6
         msg_error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
     end
-
     date = datetime[1:8] #YYYYmmdd
     year = datetime[1:4]
     month = datetime[5:6]
-    day = datetime[7:8]
 
     # Get data source for checking data availability
     source = get_data_source(workflow)
@@ -712,6 +710,7 @@ function process_workflow(workflow::SparrowWorkflow)
             end
         end
     elseif length(datetime) == 8
+        day = datetime[7:8]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
         # Process the whole day in minute_span chunks
         msg_info("Processing one day...")
@@ -735,6 +734,7 @@ function process_workflow(workflow::SparrowWorkflow)
             append!(archived_files, archived)
         end
     elseif length(datetime) == 11
+        day = datetime[7:8]
         hr = datetime[10:11]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr))
         msg_info("Processing one hour...")
@@ -758,6 +758,7 @@ function process_workflow(workflow::SparrowWorkflow)
             append!(archived_files, archived)
         end
     else
+        day = datetime[7:8]
         hr = datetime[10:11]
         min = datetime[12:13]
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
