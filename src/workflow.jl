@@ -666,7 +666,7 @@ function process_workflow(workflow::SparrowWorkflow)
         datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
     end
 
-    if length(datetime) < 8
+    if length(datetime) < 6
         msg_error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
     end
 
