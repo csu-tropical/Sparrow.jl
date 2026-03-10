@@ -658,7 +658,7 @@ function process_workflow(workflow::SparrowWorkflow)
     datetime = workflow["datetime"]
     minute_span = workflow["minute_span"]
     force_reprocess = workflow["force_reprocess"]
-    reverse = workflow["reverse"]
+    reverse_order = workflow["reverse"]
     base_archive_dir = workflow["base_archive_dir"]
 
     # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
@@ -666,52 +666,69 @@ function process_workflow(workflow::SparrowWorkflow)
         datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
     end
 
-    if length(datetime) < 6
-        msg_error("Invalid datetime format $(datetime), needs to be at least YYYYmmdd")
+    if length(datetime) < 4
+        msg_error("Invalid datetime format $(datetime), needs to be at least YYYY")
     end
     year = datetime[1:4]
-    month = datetime[5:6]
 
     # Get data source for checking data availability
     source = get_data_source(workflow)
 
-    processed_files = []
-    archived_files = []
-    if length(datetime) == 6
-        # Process a whole month
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month))
-        msg_info("Processing one month...")
-        flush(stdout)
-        dayrange = 0:30
-        if reverse
-            dayrange = reverse(dayrange)
+    # Helper to process all minute_span chunks within a single day
+    function process_day_chunks(day_dt::DateTime, processed_files, archived_files;
+                                hour_offset::Int=0, num_minutes::Int=1440)
+        max_minute = num_minutes - minute_span
+        timerange = 0:minute_span:max_minute
+        if reverse_order
+            timerange = Base.reverse(timerange)
         end
-        for d in dayrange
-            day = base_datetime + Dates.Day(d)
-            # Check to see if date exists via data source, and if not skip to the next day
-            if !has_data(source, Dates.format(day, "YYYYmmdd"))
-                msg_info("No data for $(Dates.format(day, "YYYYmmdd")), skipping...")
+        for t in timerange
+            start_time = day_dt + Dates.Hour(hour_offset) + Dates.Minute(t)
+            stop_time = start_time + Dates.Minute(minute_span)
+            msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
+            processed, archived = process_volume(workflow, start_time, stop_time)
+            append!(processed_files, processed)
+            append!(archived_files, archived)
+        end
+    end
+
+    # Helper to iterate over a range of days, skipping those without data
+    function process_day_range(first_day::DateTime, dayrange, processed_files, archived_files)
+        ordered = reverse_order ? Base.reverse(dayrange) : dayrange
+        for d in ordered
+            day_dt = first_day + Dates.Day(d)
+            if !has_data(source, Dates.format(day_dt, "YYYYmmdd"))
+                msg_info("No data for $(Dates.format(day_dt, "YYYYmmdd")), skipping...")
                 flush(stdout)
                 continue
             end
-            max_minute = 1440 - minute_span
-            timerange = 0:minute_span:max_minute
-            if reverse
-                timerange = reverse(timerange)
-            end
-            for t in timerange
-                start_time = base_datetime + Dates.Minute(t)
-                stop_time = start_time + Dates.Minute(minute_span)
-                msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
-                processed, archived = process_volume(workflow, start_time, stop_time)
-                append!(processed_files, processed)
-                append!(archived_files, archived)
-            end
+            process_day_chunks(day_dt, processed_files, archived_files)
         end
+    end
+
+    processed_files = []
+    archived_files = []
+    if length(datetime) == 4
+        # Process a whole year (YYYY)
+        base_datetime = DateTime(parse(Int64, year))
+        num_days = Dates.value(DateTime(parse(Int64, year) + 1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
+        msg_info("Processing year $year ($num_days days)...")
+        flush(stdout)
+        process_day_range(base_datetime, 0:(num_days - 1), processed_files, archived_files)
+    elseif length(datetime) == 6
+        # Process a whole month (YYYYmm)
+        month = datetime[5:6]
+        base_datetime = DateTime(parse(Int64, year), parse(Int64, month))
+        next_month = base_datetime + Dates.Month(1)
+        num_days = Dates.value(next_month - base_datetime) ÷ (1000 * 60 * 60 * 24)
+        msg_info("Processing month $year-$month ($num_days days)...")
+        flush(stdout)
+        process_day_range(base_datetime, 0:(num_days - 1), processed_files, archived_files)
     elseif length(datetime) == 8
+        # Process one day (YYYYmmdd)
+        month = datetime[5:6]
         day = datetime[7:8]
         base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
-        # Process the whole day in minute_span chunks
         msg_info("Processing one day...")
         flush(stdout)
         if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
@@ -719,23 +736,13 @@ function process_workflow(workflow::SparrowWorkflow)
             flush(stdout)
             return "not processed due to missing data"
         end
-        max_minute = 1440 - minute_span
-        timerange = 0:minute_span:max_minute
-        if reverse
-            timerange = reverse(timerange)
-        end
-        for t in timerange
-            start_time = base_datetime + Dates.Minute(t)
-            stop_time = start_time + Dates.Minute(minute_span)
-            msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
-            processed, archived = process_volume(workflow, start_time, stop_time)
-            append!(processed_files, processed)
-            append!(archived_files, archived)
-        end
+        process_day_chunks(base_datetime, processed_files, archived_files)
     elseif length(datetime) == 11
+        # Process one hour (YYYYmmdd_HH)
+        month = datetime[5:6]
         day = datetime[7:8]
         hr = datetime[10:11]
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr))
+        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
         msg_info("Processing one hour...")
         if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
             msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
@@ -743,26 +750,17 @@ function process_workflow(workflow::SparrowWorkflow)
             return "not processed due to missing data"
         end
         flush(stdout)
-        max_minute = 60 - minute_span
-        timerange = 0:minute_span:max_minute
-        if reverse
-            timerange = reverse(timerange)
-        end
-        for t in timerange
-            start_time = base_datetime + Dates.Minute(t)
-            stop_time = start_time + Dates.Minute(minute_span)
-            msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
-            processed, archived = process_volume(workflow, start_time, stop_time)
-            append!(processed_files, processed)
-            append!(archived_files, archived)
-        end
+        process_day_chunks(base_datetime, processed_files, archived_files;
+                          hour_offset=parse(Int64, hr), num_minutes=60)
     else
+        # Process a specific time window (YYYYmmdd_HHMM or longer)
+        month = datetime[5:6]
         day = datetime[7:8]
         hr = datetime[10:11]
         min = datetime[12:13]
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
         stop_time = start_time + Dates.Minute(minute_span)
-        msg_info("Processing $(Dates.format(start_time, "HHMM"))...")
+        msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
         processed_files, archived_files = process_volume(workflow, start_time, stop_time)
     end
 
