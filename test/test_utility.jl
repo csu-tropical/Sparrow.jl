@@ -2,6 +2,9 @@ using Dates
 
 include("generate_test_cfradial.jl")
 
+# Runtime detection of external tools
+const HAS_RADXPRINT = Sys.which("RadxPrint") !== nothing
+
 @testset "Utility Functions" begin
 
     @testset "Step types are defined" begin
@@ -19,58 +22,53 @@ include("generate_test_cfradial.jl")
         @test hasmethod(Sparrow.get_scan_start, Tuple{String})
     end
 
-    @testset "get_scan_start with generated CfRadial" begin
-        # Generate a test CfRadial file and verify get_scan_start reads it
-        fixture_dir = joinpath(@__DIR__, "fixtures", "data")
-        mkpath(fixture_dir)
-        testfile = joinpath(fixture_dir, "cfrad.20240903_120008_test.nc")
-        expected_time = DateTime(2024, 9, 3, 12, 0, 8)
+    if HAS_RADXPRINT
+        @testset "get_scan_start with generated CfRadial" begin
+            # Generate a test CfRadial file and verify get_scan_start reads it
+            fixture_dir = joinpath(@__DIR__, "fixtures", "data")
+            mkpath(fixture_dir)
+            testfile = joinpath(fixture_dir, "cfrad.20240903_120008_test.nc")
+            expected_time = DateTime(2024, 9, 3, 12, 0, 8)
 
-        generate_test_cfradial(testfile;
-            start_time = expected_time,
-            instrument_name = "TEST_RADAR",
-            scan_name = "TEST_VOL1")
+            generate_test_cfradial(testfile;
+                start_time = expected_time,
+                instrument_name = "TEST_RADAR",
+                scan_name = "TEST_VOL1")
 
-        try
-            result = Sparrow.get_scan_start(testfile)
-            @test result == expected_time
-            @test result isa DateTime
-        catch e
-            if e isa Base.IOError || contains(string(e), "RadxPrint")
-                @test_skip true  # RadxPrint not available in this environment
-            else
-                rethrow(e)
-            end
-        finally
-            rm(testfile; force=true)
-        end
-    end
-
-    @testset "get_scan_start with multiple times" begin
-        fixture_dir = joinpath(@__DIR__, "fixtures", "data")
-        mkpath(fixture_dir)
-
-        times = [
-            DateTime(2024, 1, 15, 0, 0, 0),
-            DateTime(2024, 6, 30, 23, 59, 59),
-            DateTime(2024, 12, 31, 12, 30, 45),
-        ]
-
-        for (i, t) in enumerate(times)
-            testfile = joinpath(fixture_dir, "cfrad_time_test_$(i).nc")
-            generate_test_cfradial(testfile; start_time=t)
             try
                 result = Sparrow.get_scan_start(testfile)
-                @test result == t
-            catch e
-                if e isa Base.IOError || contains(string(e), "RadxPrint")
-                    @test_skip true
-                else
-                    rethrow(e)
-                end
+                @test result == expected_time
+                @test result isa DateTime
             finally
                 rm(testfile; force=true)
             end
+        end
+
+        @testset "get_scan_start with multiple times" begin
+            fixture_dir = joinpath(@__DIR__, "fixtures", "data")
+            mkpath(fixture_dir)
+
+            times = [
+                DateTime(2024, 1, 15, 0, 0, 0),
+                DateTime(2024, 6, 30, 23, 59, 59),
+                DateTime(2024, 12, 31, 12, 30, 45),
+            ]
+
+            for (i, t) in enumerate(times)
+                testfile = joinpath(fixture_dir, "cfrad_time_test_$(i).nc")
+                generate_test_cfradial(testfile; start_time=t)
+                try
+                    result = Sparrow.get_scan_start(testfile)
+                    @test result == t
+                finally
+                    rm(testfile; force=true)
+                end
+            end
+        end
+    else
+        @testset "get_scan_start (skipped — RadxPrint not found)" begin
+            @test_skip true
+            @info "Skipping get_scan_start tests: RadxPrint not found on PATH"
         end
     end
 end
