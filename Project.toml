@@ -1,6 +1,6 @@
 name = "Sparrow"
 uuid = "e85e9086-995e-43cb-b1fa-761c47980264"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Michael Bell <mmbell@colostate.edu> and contributors"]
 
 [deps]
