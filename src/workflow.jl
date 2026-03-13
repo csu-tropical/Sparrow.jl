@@ -798,7 +798,7 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     processed_files = []
 
     # Set up the working directories
-    temp_dir = initialize_working_dirs(workflow, date)
+    temp_dir = initialize_working_dirs(workflow, date; start_time=start_time, stop_time=stop_time)
 
     # Check the input files to see if they fall between start and stop time
     base_data_dir = joinpath(workflow["base_data_dir"], date)

@@ -5,18 +5,15 @@
 # (anonymous access, no AWS credentials required).
 #
 # Run workflow:
-#   julia --project src/driver.jl --workflow workflows/NEXRAD_composite_workflow.jl \
-#       --datetime 20181010_1420 --nworkers 1
+#  ./sparrow --datetime 20181010_1420 workflows/NEXRAD_composite_workflow.jl
+#
 
 @workflow_type NEXRADcompositeWorkflow
 
 workflow = NEXRADcompositeWorkflow(
 
     # S3 data source — pulls directly from public NEXRAD archive
-    data_source = S3BucketSource(
-        bucket = "unidata-nexrad-level2",
-        station = "KEVX",
-    ),
+    data_source = NEXRADSource("KEVX"),
 
     # Local directories for fetched data and outputs
     base_data_dir = "/tmp/sparrow/nexrad/raw",

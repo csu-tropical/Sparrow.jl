@@ -28,6 +28,7 @@ include("utility.jl")
 export @workflow_type, @workflow_step, assign_workers, run_workflow, process_workflow
 export SparrowWorkflow, workflow_step, get_param
 export DataSource, LocalDirSource, S3BucketSource, HTTPDirSource
+export NEXRADSource, RTMASource, NBMSource, MRMSSource
 export discover_files, fetch_file, is_remote, has_data, get_data_source
 export poll_directory
 export RadxConvertStep, RoninQCStep

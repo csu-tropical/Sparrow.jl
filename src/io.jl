@@ -1,6 +1,7 @@
 # IO helper functions and workflow steps
 
-function initialize_working_dirs(workflow::SparrowWorkflow, date)
+function initialize_working_dirs(workflow::SparrowWorkflow, date;
+                                  start_time::DateTime=DateTime(1970), stop_time::DateTime=DateTime(2100))
 
     # Set up the working directories
     base_working_dir = workflow["base_working_dir"]
@@ -11,7 +12,7 @@ function initialize_working_dirs(workflow::SparrowWorkflow, date)
     # This directory holds raw data from the base_data_dir, which may be in SIGMET format or already converted to CfRadial
     working_dir = joinpath(temp_dir, "base_data", date)
     mkpath(working_dir)
-    link_base_data(date, workflow, working_dir)
+    link_base_data(date, workflow, working_dir; start_time=start_time, stop_time=stop_time)
 
     for (step_name, step_type, input_name, archive) in workflow["steps"]
         step_dir = joinpath(temp_dir, step_name, date)
@@ -49,22 +50,43 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
     return processed_files
 end
 
-function link_base_data(date, workflow, raw_working_dir)
+function link_base_data(date, workflow, raw_working_dir;
+                        start_time::DateTime=DateTime(1970), stop_time::DateTime=DateTime(2100))
 
     base_archive_dir = workflow["base_archive_dir"]
     force_reprocess = workflow["force_reprocess"]
     source = get_data_source(workflow)
 
     if is_remote(source)
-        # Remote source: download files into working directory
+        # Remote source: discover files, filter by time window, download into
+        # base_data_dir as a local cache, then symlink into the working directory
+        base_data_dir = workflow["base_data_dir"]
+        cache_dir = joinpath(base_data_dir, date)
+        mkpath(cache_dir)
         remote_files = discover_files(source, date)
+        # Filter by time window to avoid downloading the entire day
+        if start_time > DateTime(1970) && stop_time < DateTime(2100)
+            remote_files = _filter_files_by_time(remote_files, start_time, stop_time)
+            msg_info("Filtered to $(length(remote_files)) files in time window $(start_time) to $(stop_time)")
+        end
         for filename in remote_files
             fname = basename(filename)
             if force_reprocess || !check_processed(workflow, fname, base_archive_dir)
-                try
-                    fetch_file(source, fname, raw_working_dir, date)
-                catch e
-                    msg_warning("Failed to fetch $fname: $e")
+                cached_file = joinpath(cache_dir, fname)
+                if !isfile(cached_file)
+                    try
+                        fetch_file(source, fname, cache_dir, date)
+                    catch e
+                        msg_warning("Failed to fetch $fname: $e")
+                        continue
+                    end
+                else
+                    msg_debug("File $fname already cached in $cache_dir")
+                end
+                # Symlink cached file into working directory
+                link = joinpath(raw_working_dir, fname)
+                if !islink(link) && !isfile(link)
+                    symlink(cached_file, link)
                 end
             else
                 msg_debug("File $fname already processed by $(typeof(workflow)), skipping...")
@@ -73,18 +95,72 @@ function link_base_data(date, workflow, raw_working_dir)
     else
         # Local source: symlink files
         base_data_dir = source.base_dir
-        data_files = readdir("$(base_data_dir)/$(date)"; join=true)
+        data_dir = joinpath(base_data_dir, date)
+        if !isdir(data_dir)
+            msg_warning("Local data directory $data_dir does not exist")
+            return
+        end
+        data_files = readdir(data_dir; join=true)
         filter!(!isdir, data_files)
         for file in data_files
             if force_reprocess || !check_processed(workflow, file, base_archive_dir)
                 target = file
-                link = raw_working_dir * "/" * basename(file)
+                link = joinpath(raw_working_dir, basename(file))
                 symlink(target, link)
             else
                 msg_debug("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
             end
         end
     end
+end
+
+"""
+    _parse_filename_time(filename) → DateTime or nothing
+
+Extract a datetime from common meteorological data filename patterns:
+- NEXRAD: `KEVX20181010_142033_V06` → 2018-10-10T14:20:33
+- MRMS:   `MRMS_..._20201014-210000.grib2.gz` → 2020-10-14T21:00:00
+- CfRadial: `cfrad.20181010_142033...` → 2018-10-10T14:20:33
+- Generic: any `YYYYmmdd_HHMMSS` or `YYYYmmdd-HHMMSS` pattern in the filename
+"""
+function _parse_filename_time(filename::String)
+    # Try NEXRAD pattern: 4-letter station + YYYYmmdd_HHMMSS
+    m = match(r"[A-Z]{4}(\d{8})_(\d{6})", filename)
+    if m !== nothing
+        return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")
+    end
+    # Try MRMS/generic pattern: YYYYmmdd-HHMMSS
+    m = match(r"(\d{8})-(\d{6})", filename)
+    if m !== nothing
+        return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")
+    end
+    # Try CfRadial/generic pattern: YYYYmmdd_HHMMSS
+    m = match(r"(\d{8})_(\d{6})", filename)
+    if m !== nothing
+        return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")
+    end
+    return nothing
+end
+
+"""
+    _filter_files_by_time(files, start_time, stop_time) → Vector{String}
+
+Filter a list of filenames to those whose embedded timestamp falls within
+[start_time, stop_time). Files without a parseable timestamp are included
+(to avoid silently dropping data with unexpected naming).
+"""
+function _filter_files_by_time(files::Vector{String}, start_time::DateTime, stop_time::DateTime)
+    filtered = String[]
+    for f in files
+        t = _parse_filename_time(f)
+        if t === nothing
+            # Can't parse time — include to be safe
+            push!(filtered, f)
+        elseif t >= start_time && t < stop_time
+            push!(filtered, f)
+        end
+    end
+    return filtered
 end
 
 function clean_links(files)
