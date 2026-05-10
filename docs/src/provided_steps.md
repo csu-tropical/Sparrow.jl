@@ -478,7 +478,7 @@ workflow = RadarProcessingWorkflow(
     base_plot_dir = "/data/plots",
     
     # Time parameters
-    minute_span = 10,
+    span_seconds = 600,
     reverse = false,
     
     # Workflow steps

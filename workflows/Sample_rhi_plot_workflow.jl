@@ -17,8 +17,8 @@ workflow = RHIPlotWorkflow(
     base_plot_dir = "/path/to/data/figures",
     base_data_dir = "/path/to/data/raw",
 
-    # How long to span each workflow step in minutes (should match radar cycle)
-    minute_span = 20,
+    # How long to span each workflow step in seconds (should match radar cycle)
+    span_seconds = 1200,
 
     # Process in chronological order
     reverse = false,

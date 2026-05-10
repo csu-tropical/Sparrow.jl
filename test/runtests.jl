@@ -102,6 +102,10 @@ end
     include("test_data_sources.jl")
 end
 
+@testset "Chunking and Span Resolution" begin
+    include("test_chunking.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin

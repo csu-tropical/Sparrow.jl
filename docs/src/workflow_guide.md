@@ -196,7 +196,7 @@ workflow = MyWorkflow(
     # ... required params ...
     
     # Time handling
-    minute_span = 10,              # Process data in N-minute chunks
+    span_seconds = 600,            # Process data in N-second chunks (600 = 10 minutes)
     reverse = false,               # Process in reverse chronological order
     
     # Directories
@@ -284,7 +284,7 @@ When processing time-series data:
 
 ```julia
 workflow = MyWorkflow(
-    minute_span = 10,
+    span_seconds = 600,   # 10 minutes
     # ...
 )
 ```
@@ -294,6 +294,16 @@ The workflow system:
 2. Processes each chunk sequentially or in parallel
 3. Finds files matching each time window
 4. Runs all steps for that time window
+
+`span_seconds` is the chunk width in seconds, so high-cadence data can be sliced
+at sub-minute granularity (e.g. `span_seconds = 10`).
+
+#### Migration from `minute_span`
+
+The legacy `minute_span` parameter is still accepted for backward compatibility.
+On first use, Sparrow converts it to `span_seconds` (multiplying by 60), removes
+the old key from the workflow, and emits a one-time deprecation warning. New
+workflows should use `span_seconds` directly.
 
 ## Distributed Processing
 

@@ -26,7 +26,7 @@ workflow = RadarQCWorkflow(
     base_plot_dir = "/data/plots",
     
     # Processing parameters
-    minute_span = 10,
+    span_seconds = 600,
     reverse = false,
     
     # Define the processing pipeline
@@ -195,7 +195,7 @@ workflow = MultiRadarMerge(
     base_data_dir = "/data/radars",
     base_plot_dir = "/plots/composites",
     
-    minute_span = 5,
+    span_seconds = 300,
     
     # Format: (step_name, step_type, input_directory, archive)
     steps = [
@@ -387,7 +387,7 @@ workflow = ContinuousMonitor(
     base_data_dir = "/data/incoming",
     base_plot_dir = "/data/alerts",
     
-    minute_span = 1,  # Check every minute
+    span_seconds = 60,  # Check every minute
     
     # Format: (step_name, step_type, input_directory, archive)
     steps = [
@@ -549,7 +549,7 @@ workflow = ResearchPipeline(
     base_data_dir = "/data/research/raw",
     base_plot_dir = "/data/research/figures",
     
-    minute_span = 5,
+    span_seconds = 300,
     
     # Format: (step_name, step_type, input_directory, archive)
     steps = [

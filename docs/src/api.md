@@ -220,7 +220,7 @@ get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) → T
 **Examples:**
 ```julia
 # With default value
-span = get_param(workflow, "minute_span", 10)
+span = get_param(workflow, "span_seconds", 600)
 
 # With type checking
 moments = get_param(workflow, "raw_moment_names", Vector{String})

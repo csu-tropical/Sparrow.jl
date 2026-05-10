@@ -14,7 +14,7 @@ workflow = WorldAgeTestWorkflow(
     base_archive_dir = joinpath(tempdir(), "archive"),
     base_plot_dir = joinpath(tempdir(), "plots"),
     base_data_dir = joinpath(tempdir(), "data"),
-    minute_span = 5,
+    span_seconds = 300,
     reverse = false,
     steps = [
         ("builtin_pass", PassThroughStep, "raw_data", false),

@@ -12,7 +12,7 @@ workflow = MinimalTestWorkflow(
     base_data_dir = joinpath(@__DIR__, "data"),
     
     # Minimal span
-    minute_span = 5,
+    span_seconds = 300,
     
     # Don't reverse
     reverse = false,

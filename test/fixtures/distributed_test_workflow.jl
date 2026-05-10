@@ -19,7 +19,7 @@ workflow = DistributedScopeTestWorkflow(
     base_plot_dir = joinpath(tempdir(), "plots"),
     base_data_dir = joinpath(tempdir(), "data"),
 
-    minute_span = 5,
+    span_seconds = 300,
     reverse = false,
 
     # Mix built-in and custom steps

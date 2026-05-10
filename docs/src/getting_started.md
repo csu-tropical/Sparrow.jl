@@ -53,7 +53,7 @@ workflow = SimpleRadarWorkflow(
     base_plot_dir = "/data/plots",
     
     # Time parameters
-    minute_span = 10,  # Process data in 10-minute chunks
+    span_seconds = 600,  # Process data in 10-minute chunks (600 seconds)
     
     # Define the processing steps
     # Format: (step_name, step_type, input_directory, archive)
@@ -169,7 +169,7 @@ Every workflow must have these parameters:
 ### Common Optional Parameters
 
 - `base_plot_dir`: Directory for output plots
-- `minute_span`: Time span for each processing chunk (in minutes)
+- `span_seconds`: Time span for each processing chunk in seconds (default: 600). The legacy `minute_span` parameter still works but emits a deprecation warning.
 - `reverse`: Process files in reverse chronological order (default: false)
 - `message_level`: Verbosity level (0-4, default: 2)
 - `raw_moment_names`: Names of radar moments in raw data
@@ -188,7 +188,7 @@ function Sparrow.workflow_step(workflow::SimpleRadarWorkflow, ::Type{MyStep},
     data_dir = workflow["base_data_dir"]
     
     # Access with default value
-    span = Sparrow.get_param(workflow, "minute_span", 10)
+    span = Sparrow.get_param(workflow, "span_seconds", 600)
     
     # Access and type check
     moments = Sparrow.get_param(workflow, "raw_moment_names", Vector{String})

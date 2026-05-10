@@ -52,7 +52,7 @@ Parameter value if found, otherwise `default`
 
 # Example
 ```julia
-span = get_param(workflow, "minute_span", 10)
+span = get_param(workflow, "span_seconds", 600)
 threshold = get_param(workflow, "threshold", 5.0)
 ```
 """
@@ -105,6 +105,47 @@ function get_data_source(workflow::SparrowWorkflow)
     else
         return LocalDirSource(workflow["base_data_dir"])
     end
+end
+
+"""
+    resolve_span_seconds(workflow::SparrowWorkflow) → Int
+
+Resolve the chunk-span (in seconds) used by [`process_workflow`](@ref) to slice
+time ranges into successive processing windows.
+
+Resolution order:
+1. `span_seconds` if present in `workflow.params`.
+2. Deprecated `minute_span` if present: converted to seconds (×60), the
+   workflow is mutated in place to drop `minute_span` and set `span_seconds`,
+   and a one-time warning is emitted.
+3. Default `600` (10 minutes), preserving the historical default.
+"""
+function resolve_span_seconds(workflow::SparrowWorkflow)
+    if haskey(workflow.params, "span_seconds")
+        return workflow["span_seconds"]::Int
+    elseif haskey(workflow.params, "minute_span")
+        seconds = (workflow["minute_span"]::Int) * 60
+        msg_warning("Workflow parameter `minute_span` is deprecated; " *
+                    "use `span_seconds = $(seconds)` instead.")
+        workflow["span_seconds"] = seconds
+        delete!(workflow.params, "minute_span")
+        return seconds
+    else
+        return 600
+    end
+end
+
+"""
+    chunk_offsets(span_seconds::Int, num_seconds::Int; reverse::Bool=false) → StepRange
+
+Return the start-second offsets for chunking a `num_seconds`-long window into
+back-to-back chunks of `span_seconds`. If `reverse` is true, the offsets are
+returned in reverse chronological order. If `span_seconds > num_seconds` the
+range is empty.
+"""
+function chunk_offsets(span_seconds::Int, num_seconds::Int; reverse::Bool=false)
+    offsets = 0:span_seconds:(num_seconds - span_seconds)
+    return reverse ? Base.reverse(offsets) : offsets
 end
 
 """
@@ -648,15 +689,28 @@ Used when running without distributed workers.
 Processes all time windows and workflow steps sequentially without using
 distributed workers. Useful for debugging or when parallelization is not needed.
 
+The `datetime` workflow parameter selects the processing window:
+- `YYYY` — process a whole year
+- `YYYYmm` — process a whole month
+- `YYYYmmdd` — process a whole day
+- `YYYYmmdd_HH` — process a single hour
+- `YYYYmmdd_HHMM` — process a window starting at minute precision
+- `YYYYmmdd_HHMMSS` — process a window starting at second precision
+
+The window length within each branch is `span_seconds`, resolved via
+[`resolve_span_seconds`](@ref).
+
 # See Also
 - [`assign_workers`](@ref)
 - [`run_workflow`](@ref)
+- [`resolve_span_seconds`](@ref)
+- [`chunk_offsets`](@ref)
 """
 function process_workflow(workflow::SparrowWorkflow)
 
     # Set the local variables from the workflow
     datetime = workflow["datetime"]
-    minute_span = workflow["minute_span"]
+    span_seconds = resolve_span_seconds(workflow)
     force_reprocess = workflow["force_reprocess"]
     reverse_order = workflow["reverse"]
     base_archive_dir = workflow["base_archive_dir"]
@@ -674,18 +728,14 @@ function process_workflow(workflow::SparrowWorkflow)
     # Get data source for checking data availability
     source = get_data_source(workflow)
 
-    # Helper to process all minute_span chunks within a single day
+    # Helper to process all span_seconds chunks within a single day
     function process_day_chunks(day_dt::DateTime, processed_files, archived_files;
-                                hour_offset::Int=0, num_minutes::Int=1440)
-        max_minute = num_minutes - minute_span
-        timerange = 0:minute_span:max_minute
-        if reverse_order
-            timerange = Base.reverse(timerange)
-        end
+                                hour_offset::Int=0, num_seconds::Int=86400)
+        timerange = chunk_offsets(span_seconds, num_seconds; reverse=reverse_order)
         for t in timerange
-            start_time = day_dt + Dates.Hour(hour_offset) + Dates.Minute(t)
-            stop_time = start_time + Dates.Minute(minute_span)
-            msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
+            start_time = day_dt + Dates.Hour(hour_offset) + Dates.Second(t)
+            stop_time = start_time + Dates.Second(span_seconds)
+            msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
             processed, archived = process_volume(workflow, start_time, stop_time)
             append!(processed_files, processed)
             append!(archived_files, archived)
@@ -751,15 +801,27 @@ function process_workflow(workflow::SparrowWorkflow)
         end
         flush(stdout)
         process_day_chunks(base_datetime, processed_files, archived_files;
-                          hour_offset=parse(Int64, hr), num_minutes=60)
+                          hour_offset=parse(Int64, hr), num_seconds=3600)
+    elseif length(datetime) == 15
+        # Process a specific time window with second precision (YYYYmmdd_HHMMSS)
+        month = datetime[5:6]
+        day = datetime[7:8]
+        hr = datetime[10:11]
+        mn = datetime[12:13]
+        sc = datetime[14:15]
+        start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day),
+                              parse(Int64, hr), parse(Int64, mn), parse(Int64, sc))
+        stop_time = start_time + Dates.Second(span_seconds)
+        msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
+        processed_files, archived_files = process_volume(workflow, start_time, stop_time)
     else
-        # Process a specific time window (YYYYmmdd_HHMM or longer)
+        # Process a specific time window with minute precision (YYYYmmdd_HHMM or longer)
         month = datetime[5:6]
         day = datetime[7:8]
         hr = datetime[10:11]
         min = datetime[12:13]
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
-        stop_time = start_time + Dates.Minute(minute_span)
+        stop_time = start_time + Dates.Second(span_seconds)
         msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
         processed_files, archived_files = process_volume(workflow, start_time, stop_time)
     end

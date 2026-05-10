@@ -12,8 +12,8 @@ workflow = GridWorkflow(
     base_plot_dir = "/path/to/data/figures",
     base_data_dir = "/path/to/data/raw",
 
-    # How long to span each workflow step in minutes (should be equal to the radar cycle)
-    minute_span = 20,
+    # How long to span each workflow step in seconds (should be equal to the radar cycle)
+    span_seconds = 1200,
 
     # If true, then process the data in reverse chronological order (newest to oldest), otherwise process in chronological order (oldest to newest)
     reverse = false,

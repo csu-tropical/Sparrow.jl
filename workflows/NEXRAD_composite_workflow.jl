@@ -22,7 +22,7 @@ workflow = NEXRADcompositeWorkflow(
     base_plot_dir = "/tmp/sparrow/nexrad/figures",
 
     # Time configuration
-    minute_span = 5,
+    span_seconds = 300,
     reverse = false,
 
     # Processing pipeline:

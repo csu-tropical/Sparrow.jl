@@ -278,7 +278,7 @@ using SlurmClusterManager
             base_archive_dir="/tmp/archive",
             base_data_dir="/tmp/data",
             num_workers=2,
-            minute_span=10,
+            span_seconds=600,
             force_reprocess=false,
             reverse=false,
             datetime="20250101",
@@ -291,7 +291,7 @@ using SlurmClusterManager
         # Send workflow to worker and verify parameters
         result = remotecall_fetch((w) -> begin
             @assert w isa Sparrow.SparrowWorkflow
-            @assert w["minute_span"] == 10
+            @assert w["span_seconds"] == 600
             @assert w["base_working_dir"] == "/tmp/test"
             @assert length(w["raw_moment_names"]) == 2
             return "workflow_received"
@@ -301,9 +301,9 @@ using SlurmClusterManager
 
         # Test get_param on worker
         result2 = remotecall_fetch((w) -> begin
-            return Sparrow.get_param(w, "minute_span", 5)
+            return Sparrow.get_param(w, "span_seconds", 300)
         end, new_pids[1], wf)
-        @test result2 == 10
+        @test result2 == 600
 
         # Test missing param with default on worker
         result3 = remotecall_fetch((w) -> begin
