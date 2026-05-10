@@ -134,6 +134,32 @@ function _s3_resolve_prefix(source::S3BucketSource, date::String)
 end
 
 """
+    _s3_parse_list_response(xml::AbstractString, file_pattern::Regex)
+        -> (filenames::Vector{String}, next_token::Union{String,Nothing})
+
+Pure helper: parse a single ListObjectsV2 XML response. Returns matching filenames
+and the next continuation token (or `nothing` if the listing is complete or the
+truncated response is missing its token).
+"""
+function _s3_parse_list_response(xml::AbstractString, file_pattern::Regex)
+    filenames = String[]
+    for m in eachmatch(r"<Key>([^<]+)</Key>", xml)
+        filename = basename(m.captures[1])
+        if occursin(file_pattern, filename)
+            push!(filenames, filename)
+        end
+    end
+    next_token = nothing
+    if occursin(r"<IsTruncated>true</IsTruncated>", xml)
+        token_match = match(r"<NextContinuationToken>([^<]+)</NextContinuationToken>", xml)
+        if token_match !== nothing
+            next_token = String(token_match.captures[1])
+        end
+    end
+    return filenames, next_token
+end
+
+"""
     _s3_list_prefix(source::S3BucketSource, prefix::String)
 
 List all files under an S3 prefix, handling pagination for large result sets.
@@ -153,26 +179,10 @@ function _s3_list_prefix(source::S3BucketSource, prefix::String)
             buf = IOBuffer()
             Downloads.download(url, buf)
             xml = String(take!(buf))
-            # Parse <Key> elements from XML response
-            for m in eachmatch(r"<Key>([^<]+)</Key>", xml)
-                key = m.captures[1]
-                filename = basename(key)
-                if occursin(source.file_pattern, filename)
-                    push!(all_keys, filename)
-                end
-            end
-            # Check for pagination
-            is_truncated = occursin(r"<IsTruncated>true</IsTruncated>", xml)
-            if is_truncated
-                token_match = match(r"<NextContinuationToken>([^<]+)</NextContinuationToken>", xml)
-                if token_match !== nothing
-                    continuation_token = token_match.captures[1]
-                else
-                    break
-                end
-            else
-                break
-            end
+            page_keys, next_token = _s3_parse_list_response(xml, source.file_pattern)
+            append!(all_keys, page_keys)
+            isnothing(next_token) && break
+            continuation_token = next_token
         catch e
             msg_warning("Error listing S3 bucket $(source.bucket) with prefix $(prefix): $e")
             break

@@ -146,6 +146,52 @@ using Sparrow
         @test Sparrow._s3_needs_hour_iteration(nexrad, "20240101") == false
     end
 
+    @testset "S3 list-response parsing & pagination" begin
+        # Single-page response: IsTruncated=false, no continuation token
+        single_page = """<?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult>
+            <Contents><Key>2024/01/01/file_a.grib2</Key></Contents>
+            <Contents><Key>2024/01/01/file_b.grib2</Key></Contents>
+            <Contents><Key>2024/01/01/skip.txt</Key></Contents>
+            <IsTruncated>false</IsTruncated>
+        </ListBucketResult>"""
+        keys, token = Sparrow._s3_parse_list_response(single_page, r"\.grib2$")
+        @test keys == ["file_a.grib2", "file_b.grib2"]
+        @test token === nothing
+
+        # Pattern that matches everything still strips by basename
+        all_keys, _ = Sparrow._s3_parse_list_response(single_page, r".*")
+        @test all_keys == ["file_a.grib2", "file_b.grib2", "skip.txt"]
+
+        # Truncated response: returns continuation token for next page
+        truncated = """<?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult>
+            <Contents><Key>page1/a.grib2</Key></Contents>
+            <Contents><Key>page1/b.grib2</Key></Contents>
+            <IsTruncated>true</IsTruncated>
+            <NextContinuationToken>abc123==</NextContinuationToken>
+        </ListBucketResult>"""
+        keys2, token2 = Sparrow._s3_parse_list_response(truncated, r".*")
+        @test keys2 == ["a.grib2", "b.grib2"]
+        @test token2 == "abc123=="
+
+        # Defensive: IsTruncated=true but missing token -> nothing (loop terminates)
+        truncated_no_token = """<?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult>
+            <Contents><Key>orphan.grib2</Key></Contents>
+            <IsTruncated>true</IsTruncated>
+        </ListBucketResult>"""
+        _, token3 = Sparrow._s3_parse_list_response(truncated_no_token, r".*")
+        @test token3 === nothing
+
+        # Empty listing
+        empty_page = """<?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"""
+        keys4, token4 = Sparrow._s3_parse_list_response(empty_page, r".*")
+        @test isempty(keys4)
+        @test token4 === nothing
+    end
+
     @testset "NEXRADSource convenience constructor" begin
         source = NEXRADSource("KFTG")
         @test source isa S3BucketSource
@@ -368,13 +414,18 @@ using Sparrow
         end
 
         @testset "MRMS live access — Reflectivity (noaa-mrms-pds)" begin
-            # This tests pagination — reflectivity has ~720 files/day at 2-min intervals
             source = MRMSSource(product="MergedBaseReflectivity_00.50")
 
             files = discover_files(source, "20201014")
-            @test length(files) > 100  # Should have hundreds of files
+            @test !isempty(files)
             @test all(f -> endswith(f, ".grib2.gz"), files)
             @test all(f -> startswith(f, "MRMS_MergedBaseReflectivity"), files)
+
+            dest = mktempdir()
+            path = fetch_file(source, files[1], dest, "20201014")
+            @test isfile(path)
+            @test filesize(path) > 0
+            rm(dest, recursive=true)
         end
 
     end
