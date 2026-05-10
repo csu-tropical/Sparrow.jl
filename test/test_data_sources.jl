@@ -169,7 +169,7 @@ using Sparrow
         @test source.bucket == "noaa-rtma-pds"
         @test source.prefix_template == "{station}.{YYYYmmdd}/"
         @test source.extras == Dict("station" => "rtma2p5")
-        @test source.file_pattern == r"\.grb2$"
+        @test source.file_pattern == r"\.grb2(_wexp)?$"
 
         # Custom station
         source2 = RTMASource(station="akrtma")
@@ -316,7 +316,7 @@ using Sparrow
             # Discover files for a known date
             files = discover_files(source, "20250101")
             @test length(files) > 0
-            @test all(f -> endswith(f, ".grb2"), files)
+            @test all(f -> occursin(r"\.grb2(_wexp)?$", f), files)
 
             # has_data
             @test has_data(source, "20250101") == true

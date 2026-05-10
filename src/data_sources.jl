@@ -284,12 +284,12 @@ function NEXRADSource(station::String; file_pattern::Regex = r".*")
 end
 
 """
-    RTMASource(; station="rtma2p5", file_pattern=r"\\.grb2\$")
+    RTMASource(; station="rtma2p5", file_pattern=r"\\.grb2(_wexp)?\$")
 
 Create an S3BucketSource for the NOAA RTMA (Real-Time Mesoscale Analysis) public archive.
 
 Available stations include "rtma2p5" (CONUS 2.5km), "akrtma" (Alaska), etc.
-Files are hourly GRIB2 products.
+Files are hourly GRIB2 products. Analysis files use the `_wexp` (westward expanded) suffix.
 
 # Example
 ```julia
@@ -297,7 +297,7 @@ source = RTMASource()
 files = discover_files(source, "20250101")
 ```
 """
-function RTMASource(; station::String = "rtma2p5", file_pattern::Regex = r"\.grb2$")
+function RTMASource(; station::String = "rtma2p5", file_pattern::Regex = r"\.grb2(_wexp)?$")
     S3BucketSource(
         bucket = "noaa-rtma-pds",
         prefix_template = "{station}.{YYYYmmdd}/",
