@@ -394,11 +394,9 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
         workflow["force_reprocess"] = get_param(workflow, "force_reprocess", false)
     end
 
-    # Add the moment names and grid types to the workflow dict so they can be accessed by the worker processes
-    raw_moment_dict, qc_moment_dict, grid_type_dict = Daisho.initialize_moment_dictionaries(workflow["raw_moment_names"], workflow["qc_moment_names"], workflow["moment_grid_type"])
-    workflow["raw_moment_dict"] = raw_moment_dict
-    workflow["qc_moment_dict"] = qc_moment_dict
-    workflow["grid_type_dict"] = grid_type_dict
+    # Add the daisho config to the workflow dict so they can be accessed by the worker processes
+    daisho_params = DaishoParameters(workflow["daisho_config"])
+    workflow["daisho_params"] = daisho_params
 
     return workflow
 end

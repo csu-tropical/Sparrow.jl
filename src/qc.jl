@@ -81,15 +81,13 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir
 
    # Convert the input files to CfRadial
    msg_info("Processing with Ronin...")
-   ronin_config = load_object(workflow["ronin_config"])
-   models = [load_object(model) for model in ronin_config.model_output_paths]
-   input_files = readdir(input_dir; join=true)
-   filter!(!isdir,input_files)
-   for input_file in input_files
-       output_file = replace(input_file, input_dir => output_dir)
-       cp(input_file, output_file, follow_symlinks=true)
+   ronin_config = load_config(workflow["ronin_config"])
+   models = [Ronin.load_model(m, "convolution") for m in ronin_config.model_output_paths]
+   input_files  = filter(!isdir, readdir(input_dir; join=true))
+   output_files = [replace(f, input_dir => output_dir) for f in input_files]
+   for (src, dst) in zip(input_files, output_files)
+       cp(src, dst; follow_symlinks=true)
    end
-   output_files = readdir(output_dir; join=true)
-   filter!(!isdir,output_files)
-   composite_QC(ronin_config, output_files, models)
+   #ronin_config.input_path = output_dir
+   composite_QC(ronin_config, output_files)
 end
