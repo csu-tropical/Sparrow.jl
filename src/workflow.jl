@@ -860,12 +860,16 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     # Set up the working directories
     temp_dir = initialize_working_dirs(workflow, date; start_time=start_time, stop_time=stop_time)
 
-    # Check the input files to see if they fall between start and stop time
+    # Restrict the input files to those in [start_time, stop_time). The returned
+    # `input_files` is used by the caller to mark processed files, so it must
+    # reflect only the chunk window — otherwise files outside the window would
+    # be marked processed without actually being touched.
     base_data_dir = joinpath(workflow["base_data_dir"], date)
     input_files = readdir(base_data_dir; join=true)
-    filter!(!isdir,input_files)
-    if haskey(workflow.params, "process_all") && workflow["process_all"]
-        input_files = filter(file -> get_scan_start(file) >= start_time && get_scan_start(file) < stop_time, input_files)
+    filter!(!isdir, input_files)
+    filter!(input_files) do file
+        scan_start = get_scan_start(file)
+        scan_start >= start_time && scan_start < stop_time
     end
 
     # Run the workflow steps

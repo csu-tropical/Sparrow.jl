@@ -38,38 +38,20 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RadxConvertStep}, input
     # Convert the input files to CfRadial
     msg_info("Converting data to CfRadial...")
     input_files = readdir(input_dir; join=true)
-    filter!(!isdir,input_files)
-    files = join(input_files, " ")
+    filter!(!isdir, input_files)
     # RadxConvert adds the YYYYmmdd automatically, so we have to remove it from output_dir
     radx_output_dir = output_dir[1:end-9]
-    # Save the date
-    start_date = Dates.format(start_time, "YYYYmmdd")
     for file in input_files
-        # Get the scan start time
         scan_start = get_scan_start(file)
-         if haskey(workflow.params, "process_all") && !workflow["process_all"]
-             if scan_start < start_time || scan_start >= stop_time
-                msg_debug("Skipping $file")
-                continue
-            end
+        if scan_start < start_time || scan_start >= stop_time
+            msg_debug("Skipping $file")
+            continue
         end
         try
             run(`RadxConvert -sort_rays_by_time -outdir $radx_output_dir -const_ngates -f $file`)
         catch e
             msg_warning("Error converting $file with RadxConvert: $e")
             continue
-        end
-        if haskey(workflow.params, "process_all") && workflow["process_all"]
-            scan_date = Dates.format(scan_start, "YYYYmmdd")
-            if scan_date != start_date
-                # RadxConvert will have put it in a subdirectory with the date of the actual file, so we need to move it back to the output directory
-                radx_output_dir = joinpath(radx_output_dir, date)
-                msg_debug("Ignoring $date and moving files from $radx_output_dir to $output_dir")
-                for cfrad_file in readdir(radx_output_dir; join=true)
-                    output_file = replace(cfrad_file, radx_output_dir => output_dir)
-                    mv(cfrad_file, output_file)
-                end
-            end
         end
     end
 end
@@ -79,15 +61,19 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir
 
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
 
-   # Convert the input files to CfRadial
-   msg_info("Processing with Ronin...")
-   ronin_config = load_config(workflow["ronin_config"])
-   models = [Ronin.load_model(m, "convolution") for m in ronin_config.model_output_paths]
-   input_files  = filter(!isdir, readdir(input_dir; join=true))
-   output_files = [replace(f, input_dir => output_dir) for f in input_files]
-   for (src, dst) in zip(input_files, output_files)
-       cp(src, dst; follow_symlinks=true)
-   end
-   #ronin_config.input_path = output_dir
-   composite_QC(ronin_config, output_files)
+    msg_info("Processing with Ronin...")
+    input_files = filter(!isdir, readdir(input_dir; join=true))
+    filter!(input_files) do file
+        scan_start = get_scan_start(file)
+        scan_start >= start_time && scan_start < stop_time
+    end
+    if length(input_files) > 0
+        output_files = [replace(f, input_dir => output_dir) for f in input_files]
+        for (src, dst) in zip(input_files, output_files)
+            cp(src, dst; follow_symlinks=true)
+        end
+        ronin_config = load_config(workflow["ronin_config"])
+        models = [Ronin.load_model(m, "convolution") for m in ronin_config.model_output_paths]
+        composite_QC(ronin_config, output_files)
+    end
 end

@@ -102,6 +102,10 @@ function link_base_data(date, workflow, raw_working_dir;
         end
         data_files = readdir(data_dir; join=true)
         filter!(!isdir, data_files)
+        # Filter by time window so chunked runs only see their own files
+        if start_time > DateTime(1970) && stop_time < DateTime(2100)
+            data_files = _filter_files_by_time(data_files, start_time, stop_time)
+        end
         for file in data_files
             if force_reprocess || !check_processed(workflow, file, base_archive_dir)
                 target = file

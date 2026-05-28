@@ -32,9 +32,6 @@ workflow = P3RoninWorkflow(
         ("RoninQC", RoninQCStep, "cfradial_raw", true)
     ],
 
-    # If true, then ignore the time filter and process all files in the input directory
-    process_all = true,
-
     # Raw moment names that are used in the first step of the workflow, usually the names of the moments in the base data files
     raw_moment_names = ["DBZ", "VEL", "WIDTH", "SQI"],
 
