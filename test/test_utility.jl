@@ -4,6 +4,7 @@ include("generate_test_cfradial.jl")
 
 # Runtime detection of external tools
 const HAS_RADXPRINT = Sys.which("RadxPrint") !== nothing
+const HAS_RADXCONVERT = Sys.which("RadxConvert") !== nothing
 
 @testset "Utility Functions" begin
 
@@ -63,6 +64,41 @@ const HAS_RADXPRINT = Sys.which("RadxPrint") !== nothing
                 finally
                     rm(testfile; force=true)
                 end
+            end
+        end
+
+        # CfRadial 2.0 regression: lrose leaves the volume startTimeSecs unset for
+        # cfrad2.* files, so get_scan_start must fall back to time_coverage_start.
+        if HAS_RADXCONVERT
+            @testset "get_scan_start with CfRadial 2.0 (cfrad2)" begin
+                fixture_dir = joinpath(@__DIR__, "fixtures", "data")
+                v2_dir = joinpath(fixture_dir, "cf2")
+                mkpath(fixture_dir); mkpath(v2_dir)
+                v1file = joinpath(fixture_dir, "cfrad.20240903_120008_cf2src.nc")
+                expected_time = DateTime(2024, 9, 3, 12, 0, 8)
+
+                generate_test_cfradial(v1file; start_time = expected_time)
+                try
+                    # Convert to CfRadial 2.0; lrose writes to <outdir>/<YYYYMMDD>/cfrad2.*.nc
+                    run(pipeline(`RadxConvert -cf2 -f $v1file -outdir $v2_dir`;
+                                 stdout=devnull, stderr=devnull))
+                    v2files = filter(f -> startswith(basename(f), "cfrad2"),
+                                     [joinpath(root, f) for (root, _, fs) in walkdir(v2_dir)
+                                      for f in fs if endswith(f, ".nc")])
+                    @test !isempty(v2files)
+                    if !isempty(v2files)
+                        result = Sparrow.get_scan_start(first(v2files))
+                        @test result == expected_time
+                    end
+                finally
+                    rm(v1file; force=true)
+                    rm(v2_dir; force=true, recursive=true)
+                end
+            end
+        else
+            @testset "get_scan_start cfrad2 (skipped — RadxConvert not found)" begin
+                @test_skip true
+                @info "Skipping cfrad2 test: RadxConvert not found on PATH"
             end
         end
     else

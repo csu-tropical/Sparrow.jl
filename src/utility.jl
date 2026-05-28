@@ -34,16 +34,20 @@ end
 """
     get_scan_start(file) → DateTime
 
-Get the start time of a radar scan file using RadxPrint.
+Get the start time of a radar scan file.
 
-Works with any file format supported by RadxPrint (CfRadial, Sigmet, DORADE,
-UF, and 30+ other radar formats). Requires `RadxPrint` to be available on PATH.
+The primary path uses RadxPrint, which works with any format it supports
+(CfRadial-1, Sigmet, DORADE, UF, and 30+ others); requires `RadxPrint` on PATH.
+When RadxPrint cannot supply the volume start time — notably for CfRadial 2.0
+(`cfrad2.*`) files, where lrose leaves it unset — the canonical
+`time_coverage_start` global attribute is read directly via NCDatasets.
 
 # Arguments
 - `file`: Path to a radar data file
 
 # Returns
-- `DateTime` of the scan start time
+- `DateTime` of the scan start time, or `DateTime(1970, 1, 1)` if it cannot be
+  determined (so callers' time-window filters skip the file).
 
 # Example
 ```julia
@@ -51,16 +55,35 @@ scan_time = get_scan_start("/path/to/cfrad.20240101_120000.nc")
 ```
 """
 function get_scan_start(file)
+    # Primary: RadxPrint reads many radar formats and reports the volume start as
+    # `startTimeSecs: YYYY/mm/dd HH:MM:SS`.
+    radxprint_err = nothing
     try
-        cmd_output = readchomp(pipeline(`RadxPrint -meta_only -f $file`, `grep startTimeSecs`))
-        if length(cmd_output) >= 18
-            return DateTime(cmd_output[18:end], dateformat"YYYY/mm/dd HH:MM:SS")
-        else
-            msg_warning("RadxPrint output too short for $file: '$cmd_output'")
-        end
+        meta = readchomp(`RadxPrint -meta_only -f $file`)
+        m = match(r"startTimeSecs:\s*(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})", meta)
+        m === nothing || return DateTime(m.captures[1], dateformat"YYYY/mm/dd HH:MM:SS")
     catch e
-        msg_warning("Error running RadxPrint on $file: $e")
+        radxprint_err = e
     end
+    # Fallback for CfRadial 2.0 (cfrad2.*): lrose leaves the volume start unset
+    # ("===== NOT SET ====="), so read the standard `time_coverage_start` global
+    # attribute (ISO 8601). CfRadial 2.0 files are always NetCDF, so this is only
+    # attempted when RadxPrint itself ran but did not report a start time.
+    if radxprint_err === nothing
+        try
+            iso = NCDataset(file) do ds
+                get(ds.attrib, "time_coverage_start", nothing)
+            end
+            if iso isa AbstractString
+                m = match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", iso)
+                m === nothing || return DateTime(m.match)
+            end
+        catch
+            # fall through to the warning below
+        end
+    end
+    msg_warning("Could not determine scan start time for $file" *
+                (radxprint_err === nothing ? "" : "; RadxPrint failed: $radxprint_err"))
     # Return a far-past date so callers' time-window filters skip this file
     return DateTime(1970, 1, 1)
 end
