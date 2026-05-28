@@ -56,6 +56,24 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RadxConvertStep}, input
     end
 end
 
+# Per-worker cache for Ronin config + loaded models. Workers stay alive for the
+# whole run, so the cache amortizes the JLD2 load (≈45s per call) across every
+# chunk that worker handles. Keyed by absolute config path so two workflows
+# pointing at different configs don't share an entry.
+const RONIN_CACHE = Dict{String,NamedTuple}()
+
+function _get_ronin_resources(config_path::String)
+    key = abspath(config_path)
+    cached = get(RONIN_CACHE, key, nothing)
+    cached === nothing || return cached
+    msg_info("Loading Ronin config and models from $config_path (one-time per worker)...")
+    config = load_config(config_path)
+    models = [Ronin.load_model(m, config.task_mode) for m in config.model_output_paths]
+    cached = (config=config, models=models)
+    RONIN_CACHE[key] = cached
+    return cached
+end
+
 @workflow_step RoninQCStep
 function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, step_name::String, kwargs...)
 
@@ -72,8 +90,7 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir
         for (src, dst) in zip(input_files, output_files)
             cp(src, dst; follow_symlinks=true)
         end
-        ronin_config = load_config(workflow["ronin_config"])
-        models = [Ronin.load_model(m, "convolution") for m in ronin_config.model_output_paths]
-        composite_QC(ronin_config, output_files)
+        cached = _get_ronin_resources(workflow["ronin_config"])
+        composite_QC(cached.config, output_files, cached.models)
     end
 end
