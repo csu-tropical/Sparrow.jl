@@ -229,6 +229,40 @@ moments = get_param(workflow, "raw_moment_names", Vector{String})
 value = workflow["required_param"]
 ```
 
+### get_daisho_params
+
+Get the Daisho parameters built from the workflow's `daisho_config` TOML file. Used by the gridding steps; throws an error with setup instructions if the workflow has no `daisho_config` parameter.
+
+**Signature:**
+```julia
+get_daisho_params(workflow::SparrowWorkflow) → DaishoParameters
+```
+
+## Launcher Script Functions
+
+### sparrow_script_path
+
+Path to the `sparrow` launcher script bundled with the package.
+
+**Signature:**
+```julia
+sparrow_script_path() → String
+```
+
+### install_sparrow_script
+
+Copy the bundled `sparrow` launcher script into a directory on your PATH (default `~/.local/bin`) and make it executable.
+
+**Signature:**
+```julia
+install_sparrow_script(; dest=joinpath(homedir(), ".local", "bin"), force=false) → String
+```
+
+**Example:**
+```bash
+julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
+```
+
 ## Message System
 
 ### Message Functions
@@ -376,7 +410,7 @@ workflow                  Workflow file to execute (required, positional)
 
 **Example:**
 ```bash
-julia sparrow my_workflow.jl --datetime 20240101_000000 \
+sparrow my_workflow.jl --datetime 20240101_000000 \
     --num_workers 4 --threads 2 -v 2
 ```
 
@@ -468,5 +502,5 @@ end
 
 Run with:
 ```bash
-julia sparrow pipeline.jl --datetime 20240101_000000
+sparrow pipeline.jl --datetime 20240101_000000
 ```

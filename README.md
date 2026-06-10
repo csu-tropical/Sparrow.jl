@@ -23,15 +23,13 @@ Sparrow.jl is a flexible, distributed workflow system for processing weather rad
 
 ## Installation
 
-Sparrow.jl is not an officially registered package yet, so installation takes a few extra steps to manually install dependencies first. 
+Sparrow.jl is not an officially registered package yet, so installation takes an extra step to manually install the unregistered dependencies first. 
 
 ### Julia Packages
 
-Most of the Julia packages will be automatically installed when you add Sparrow.jl, but the following need to be manually installed first:
+Most of the Julia packages will be automatically installed when you add Sparrow.jl. [Springsteel.jl](https://github.com/csu-tropical/Springsteel.jl) (semi-spectral grid engine) and [Ronin.jl](https://github.com/csu-tropical/Ronin.jl) (random forest Optimized Nonmeteorological IdentificatioN radar quality control software) are registered packages, but the following needs to be manually installed first:
 
-- [Springsteel.jl](https://github.com/csu-tropical/Springsteel.jl) - Semi-spectral grid engine 
 - [Daisho.jl](https://github.com/csu-tropical/Daisho.jl) - Data analysis and assimilation software
-- [Ronin.jl](https://github.com/csu-tropical/Ronin.jl) - Random forest Optimized Nonmeteorological IdentificatioN radar quality control software
 
 ### External Tools (Optional)
 
@@ -41,13 +39,13 @@ Future support for [PyArt](https://github.com/ARM-DOE/pyart) steps as part of th
 
 ### Package Installation
 
-If you just want to use it, install it and the dependencies directly from the GitHub repositories:
+If you just want to use it, install the registered dependencies by name and the unregistered packages directly from the GitHub repositories:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/csu-tropical/Springsteel.jl")
+Pkg.add("Springsteel")
 Pkg.add(url="https://github.com/csu-tropical/Daisho.jl")
-Pkg.add(url="https://github.com/csu-tropical/Ronin.jl")
+Pkg.add("Ronin")
 Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 ```
 
@@ -57,9 +55,52 @@ If you want to actively develop or modify Sparrow then you can clone the reposit
 
 Test to make sure the precompilation was successful by running `using Sparrow` in the REPL. If everything is successful then you should get no errors and it will just move to a new line.
 
+### Installing the `sparrow` command
+
+Workflows are run with the `sparrow` launcher script that is bundled with the package. To copy it onto your PATH (default `~/.local/bin`), run:
+
+```bash
+julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
+```
+
+After that you can run workflows from any directory with `sparrow my_workflow.jl ...`. If you cloned the repository instead, the script is at the repository root and can be run directly with `julia /path/to/Sparrow.jl/sparrow` or added to your PATH from there.
+
 ## Usage
 
-### Basic Example
+### Simplest Example
+
+The smallest possible workflow uses a single pre-built step and no custom code. `PassThroughStep` just copies files from the data directory to the archive, so you can verify your installation and learn the mechanics without any external tools:
+
+```julia
+using Sparrow
+
+@workflow_type SimpleWorkflow
+
+workflow = SimpleWorkflow(
+    base_working_dir = "/tmp/sparrow/work",
+    base_archive_dir = "/tmp/sparrow/archive",
+    base_data_dir = "/path/to/your/radar/files",
+    base_plot_dir = "/tmp/sparrow/plots",
+
+    # Length of each processing window: seconds, or "20S"/"5M"/"10H"/"1D"
+    span_seconds = "10M",
+
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+Save as `my_workflow.jl` and run on the day you have data for:
+
+```bash
+sparrow my_workflow.jl --datetime 20260101_120000
+```
+
+### Custom Step Example
+
+Define your own workflow types and steps for more complex processing:
 
 ```julia
 using Sparrow
@@ -84,7 +125,7 @@ workflow = MyRadarWorkflow(
         ("grid", Gridding, "qc", true)
     ],
     
-    minute_span = 10,
+    span_seconds = "10M",
     # Add other parameters as needed
 )
 
@@ -97,12 +138,6 @@ function Sparrow.workflow_step(workflow::MyRadarWorkflow, ::Type{QualityControl}
 end
 ```
 
-Save as `my_workflow.jl` and run:
-
-```bash
-sparrow my_workflow.jl --datetime 20260101_120000
-```
-
 ## Pre-built Workflow Steps
 
 Sparrow includes several ready-to-use workflow steps:
@@ -110,6 +145,8 @@ Sparrow includes several ready-to-use workflow steps:
 - **Utility**: `PassThroughStep`, `filterByTimeStep`
 - **Quality Control**: `RadxConvertStep`, `RoninQCStep`
 - **Gridding**: `GridRHIStep`, `GridCompositeStep`, `GridVolumeStep`, `GridLatlonStep`, `GridPPIStep`, `GridQVPStep`
+
+The gridding steps are configured with a [Daisho](https://github.com/csu-tropical/Daisho.jl) TOML file referenced by the `daisho_config` workflow parameter. Generate a template with `using Daisho; print_config("daisho.toml")`.
 
 See the [Provided Workflow Steps](https://csu-tropical.github.io/Sparrow.jl/dev/provided_steps/) documentation for complete details.
 

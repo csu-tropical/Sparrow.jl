@@ -164,15 +164,32 @@ workflow = MyWorkflow(
 
 All gridding steps use the Daisho.jl package for radar coordinate transformations and interpolation.
 
-### Common Parameters
+### Configuration via Daisho TOML
 
-Most gridding steps require these workflow parameters:
+Grid geometry, the fields to grid, interpolation methods, and gridding weights are all configured in a Daisho TOML file referenced by the `daisho_config` workflow parameter:
 
-- `qc_moment_dict`: Dictionary mapping moment names (e.g., "DBZ" → "reflectivity")
-- `grid_type_dict`: Dictionary specifying interpolation method per moment (`:linear`, `:weighted`, `:nearest`)
-- `beam_inflation`: Beam width inflation factor (typically 1.0-2.0)
-- `missing_key`: Value for missing/invalid data (typically -9999.0)
-- `valid_key`: Minimum valid data value (typically -32.0 for DBZ)
+```julia
+workflow = MyWorkflow(
+    steps = [
+        ("grid_volume", GridVolumeStep, "qc", true),
+    ],
+    daisho_config = "/path/to/daisho.toml",
+)
+```
+
+Generate a template with `using Daisho; print_config("daisho.toml")` and edit it for your radar. The relevant sections are:
+
+- `[fields]` — the moments to grid, their interpolation type (`linear_interp`, `weighted_interp`, `nearest_interp`), and the special tags `define_detection` (field whose presence proves a detectable echo) and `define_scanned` (field whose presence proves the gate was scanned)
+- `[io]` — fill value and undetect value for the output files
+- `[gridding]` — power threshold and region-of-influence weighting options
+- `[grid.cartesian]` — x/y/z extents used by volume, composite, PPI, and QVP grids
+- `[grid.rhi]` — range/height extents for RHI grids
+- `[grid.latlon]` — lat/lon extents for geographic grids
+- `[grid.metadata]` — CF global attributes written to every gridded output
+
+The TOML is validated when the workflow starts, and a grid step that needs a missing section raises an error naming the operation and the section. Legacy per-workflow grid parameters from older versions (`vol_xmin`, `beam_inflation`, `qc_moment_dict`, `grid_type_dict`, `missing_key`, `valid_key`, power thresholds, etc.) are ignored with a warning.
+
+Output files are named by the scan start time with second precision, so scans within the same minute do not overwrite each other.
 
 ---
 
@@ -180,7 +197,7 @@ Most gridding steps require these workflow parameters:
 
 **Module:** `grid.jl`
 
-**Purpose:** Grid RHI (Range-Height Indicator) scans to a regular range-height grid.
+**Purpose:** Grid RHI (Range-Height Indicator) scans to a regular range-height grid. Each sweep in a file is gridded as a separate product.
 
 **Use Cases:**
 - Processing vertically-pointing or RHI scans
@@ -188,39 +205,10 @@ Most gridding steps require these workflow parameters:
 - Studying vertical structure
 
 **Parameters Required:**
-- Common gridding parameters (above)
-- `rmin`: Minimum range (m)
-- `rincr`: Range increment (m)
-- `rdim`: Number of range bins
-- `rhi_zmin`: Minimum height (m)
-- `rhi_zincr`: Height increment (m)
-- `rhi_zdim`: Number of height bins
-- `rhi_power_threshold`: Power threshold for valid data
-
-**Example:**
-```julia
-workflow = MyWorkflow(
-    steps = [
-        ("qc", MyQCStep, "base_data", false),
-        ("grid_rhi", GridRHIStep, "qc", true),
-    ],
-    qc_moment_dict = Dict("DBZ" => "reflectivity", "VEL" => "velocity"),
-    grid_type_dict = Dict("reflectivity" => :linear, "velocity" => :weighted),
-    rmin = 0.0,
-    rincr = 100.0,
-    rdim = 200,
-    rhi_zmin = 0.0,
-    rhi_zincr = 100.0,
-    rhi_zdim = 150,
-    beam_inflation = 1.5,
-    rhi_power_threshold = -10.0,
-    missing_key = -9999.0,
-    valid_key = -32.0,
-)
-```
+- `daisho_config` with `[grid.rhi]` configured
 
 **Output:**
-- Files named: `gridded_rhi_YYYYmmdd_HHMM_AA.A.nc` (AA.A = azimuth angle)
+- Files named: `gridded_rhi_YYYYmmdd_HHMMSS_AA.A.nc` (AA.A = fixed angle)
 - Regular 2D grid in range and height coordinates
 
 ---
@@ -237,32 +225,10 @@ workflow = MyWorkflow(
 - Maximum/composite reflectivity products
 
 **Parameters Required:**
-- Common gridding parameters
-- `long_xmin`: Minimum X coordinate (m, radar-relative)
-- `long_xincr`: X increment (m)
-- `long_xdim`: Number of X bins
-- `long_ymin`: Minimum Y coordinate (m)
-- `long_yincr`: Y increment (m)
-- `long_ydim`: Number of Y bins
-
-**Example:**
-```julia
-workflow = MyWorkflow(
-    steps = [
-        ("grid_composite", GridCompositeStep, "qc", true),
-    ],
-    # Common params...
-    long_xmin = -50000.0,
-    long_xincr = 500.0,
-    long_xdim = 200,
-    long_ymin = -50000.0,
-    long_yincr = 500.0,
-    long_ydim = 200,
-)
-```
+- `daisho_config` with `[grid.cartesian]` configured (the z-axis settings are ignored)
 
 **Output:**
-- Files named: `gridded_composite_YYYYmmdd_HHMM.nc`
+- Files named: `gridded_composite_YYYYmmdd_HHMMSS.nc`
 - 2D horizontal composite grid
 
 ---
@@ -279,34 +245,10 @@ workflow = MyWorkflow(
 - 3D structure analysis
 
 **Parameters Required:**
-- Common gridding parameters
-- `vol_xmin`, `vol_xincr`, `vol_xdim`: X-axis parameters (m)
-- `vol_ymin`, `vol_yincr`, `vol_ydim`: Y-axis parameters (m)
-- `zmin`, `zincr`, `zdim`: Z-axis (height) parameters (m)
-- `ppi_power_threshold`: Power threshold for PPI scans
-
-**Example:**
-```julia
-workflow = MyWorkflow(
-    steps = [
-        ("grid_volume", GridVolumeStep, "qc", true),
-    ],
-    # Common params...
-    vol_xmin = -40000.0,
-    vol_xincr = 500.0,
-    vol_xdim = 160,
-    vol_ymin = -40000.0,
-    vol_yincr = 500.0,
-    vol_ydim = 160,
-    zmin = 0.0,
-    zincr = 250.0,
-    zdim = 60,
-    ppi_power_threshold = -10.0,
-)
-```
+- `daisho_config` with `[grid.cartesian]` configured
 
 **Output:**
-- Files named: `gridded_volume_YYYYmmdd_HHMM.nc`
+- Files named: `gridded_volume_YYYYmmdd_HHMMSS.nc`
 - 3D Cartesian grid (X, Y, Z)
 
 ---
@@ -323,36 +265,10 @@ workflow = MyWorkflow(
 - GIS integration
 
 **Parameters Required:**
-- Common gridding parameters
-- `latmin`: Minimum latitude (degrees)
-- `latdim`: Number of latitude bins
-- `lonmin`: Minimum longitude (degrees)
-- `londim`: Number of longitude bins
-- `degincr`: Degree increment (both lat and lon)
-- `zmin`, `zincr`, `zdim`: Height parameters (m)
-- `ppi_power_threshold`: Power threshold
-
-**Example:**
-```julia
-workflow = MyWorkflow(
-    steps = [
-        ("grid_latlon", GridLatlonStep, "qc", true),
-    ],
-    # Common params...
-    latmin = 25.0,
-    latdim = 100,
-    lonmin = -80.0,
-    londim = 100,
-    degincr = 0.01,  # ~1 km
-    zmin = 0.0,
-    zincr = 250.0,
-    zdim = 60,
-    ppi_power_threshold = -10.0,
-)
-```
+- `daisho_config` with `[grid.latlon]` configured
 
 **Output:**
-- Files named: `gridded_latlon_YYYYmmdd_HHMM.nc`
+- Files named: `gridded_latlon_YYYYmmdd_HHMMSS.nc`
 - 3D grid in latitude, longitude, height coordinates
 
 ---
@@ -369,10 +285,7 @@ workflow = MyWorkflow(
 - Studying elevation-dependent phenomena
 
 **Parameters Required:**
-- Common gridding parameters
-- `long_xmin`, `long_xincr`, `long_xdim`: X-axis parameters (m)
-- `long_ymin`, `long_yincr`, `long_ydim`: Y-axis parameters (m)
-- `ppi_power_threshold`: Power threshold
+- `daisho_config` with `[grid.cartesian]` configured (the z-axis settings are ignored)
 - `max_ppi_angle`: Maximum elevation angle to grid (degrees)
 
 **Example:**
@@ -381,20 +294,13 @@ workflow = MyWorkflow(
     steps = [
         ("grid_ppi", GridPPIStep, "qc", true),
     ],
-    # Common params...
-    long_xmin = -50000.0,
-    long_xincr = 500.0,
-    long_xdim = 200,
-    long_ymin = -50000.0,
-    long_yincr = 500.0,
-    long_ydim = 200,
+    daisho_config = "/path/to/daisho.toml",
     max_ppi_angle = 10.0,  # Only grid sweeps <= 10 degrees
-    ppi_power_threshold = -10.0,
 )
 ```
 
 **Output:**
-- Files named: `gridded_ppi_YYYYmmdd_HHMM_EE.E.nc` (EE.E = elevation angle)
+- Files named: `gridded_ppi_YYYYmmdd_HHMMSS_EE.E.nc` (EE.E = elevation angle)
 - One file per PPI sweep
 - 2D horizontal grids
 
@@ -412,9 +318,7 @@ workflow = MyWorkflow(
 - Microphysical retrievals
 
 **Parameters Required:**
-- Common gridding parameters
-- `zmin`, `zincr`, `zdim`: Height parameters (m)
-- `qvp_power_threshold`: Power threshold
+- `daisho_config` with `[grid.cartesian]` configured (the z-axis settings define the column)
 - `min_qvp_angle`: Minimum elevation angle for QVP (degrees, typically 70-90°)
 
 **Example:**
@@ -423,16 +327,13 @@ workflow = MyWorkflow(
     steps = [
         ("grid_qvp", GridQVPStep, "qc", true),
     ],
-    # Common params...
-    zmin = 0.0,
-    zincr = 100.0,
-    zdim = 150,
+    daisho_config = "/path/to/daisho.toml",
     min_qvp_angle = 75.0,  # Only use scans >= 75 degrees
-    qvp_power_threshold = -15.0,
 )
 ```
 
 **Output:**
+- Files named: `gridded_qvp_YYYYmmdd_HHMMSS_EE.E.nc`
 - Vertical profiles averaged azimuthally
 - Useful for precipitation microphysics studies
 
@@ -477,8 +378,8 @@ workflow = RadarProcessingWorkflow(
     base_data_dir = "/data/raw/radar",
     base_plot_dir = "/data/plots",
     
-    # Time parameters
-    span_seconds = 600,
+    # Time parameters: seconds, or a string with a unit code ("20S", "5M", "10H", "1D")
+    span_seconds = "10M",
     reverse = false,
     
     # Workflow steps
@@ -489,46 +390,14 @@ workflow = RadarProcessingWorkflow(
         ("grid_ppi", GridPPIStep, "ronin_qc", true),
     ],
     
-    # Moment configuration
-    qc_moment_dict = Dict(
-        "DBZ" => "reflectivity",
-        "VEL" => "velocity",
-        "WIDTH" => "spectrum_width"
-    ),
-    grid_type_dict = Dict(
-        "reflectivity" => :linear,
-        "velocity" => :weighted,
-        "spectrum_width" => :weighted
-    ),
-    
     # Ronin QC
     ronin_config = "/data/models/ronin_seapol.jld2",
     
-    # Volume grid parameters
-    vol_xmin = -40000.0,
-    vol_xincr = 500.0,
-    vol_xdim = 160,
-    vol_ymin = -40000.0,
-    vol_yincr = 500.0,
-    vol_ydim = 160,
-    zmin = 0.0,
-    zincr = 250.0,
-    zdim = 60,
+    # Daisho TOML with [fields], [io], [gridding], and [grid.cartesian] configured
+    daisho_config = "/data/config/daisho.toml",
     
-    # PPI grid parameters
-    long_xmin = -50000.0,
-    long_xincr = 500.0,
-    long_xdim = 200,
-    long_ymin = -50000.0,
-    long_yincr = 500.0,
-    long_ydim = 200,
+    # PPI sweep selection
     max_ppi_angle = 5.0,
-    
-    # Common gridding parameters
-    beam_inflation = 1.5,
-    ppi_power_threshold = -10.0,
-    missing_key = -9999.0,
-    valid_key = -32.0,
     
     message_level = 2
 )
@@ -536,7 +405,7 @@ workflow = RadarProcessingWorkflow(
 
 Run with:
 ```bash
-julia sparrow radar_processing.jl --datetime 20240115_120000 --num_workers 4
+sparrow radar_processing.jl --datetime 20240115_120000 --num_workers 4
 ```
 
 ---

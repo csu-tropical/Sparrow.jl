@@ -196,7 +196,7 @@ workflow = MyWorkflow(
     # ... required params ...
     
     # Time handling
-    span_seconds = 600,            # Process data in N-second chunks (600 = 10 minutes)
+    span_seconds = "10M",          # Chunk length: seconds (600) or "20S"/"5M"/"10H"/"1D"
     reverse = false,               # Process in reverse chronological order
     
     # Directories
@@ -205,7 +205,7 @@ workflow = MyWorkflow(
     # Radar-specific
     raw_moment_names = ["DBZ", "VEL", "WIDTH"],
     qc_moment_names = ["DBZ", "VEL"],
-    moment_grid_type = [:linear, :linear, :log],
+    daisho_config = "/path/to/daisho.toml",  # Daisho TOML for the gridding steps
     
     # Logging
     message_level = 2,             # 0=error, 1=warning, 2=info, 3=debug, 4=trace
@@ -296,7 +296,9 @@ The workflow system:
 4. Runs all steps for that time window
 
 `span_seconds` is the chunk width in seconds, so high-cadence data can be sliced
-at sub-minute granularity (e.g. `span_seconds = 10`).
+at sub-minute granularity (e.g. `span_seconds = 10`). It also accepts a string
+with a unit code — `"20S"` (seconds), `"5M"` (minutes), `"10H"` (hours),
+`"1D"` (days) — or a `Dates.Period` such as `Minute(5)`.
 
 #### Migration from `minute_span`
 

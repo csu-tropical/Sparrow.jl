@@ -10,29 +10,84 @@ Sparrow.jl requires Julia 1.6 or later. You can download Julia from [julialang.o
 
 ### Installing Sparrow.jl
 
-Since Sparrow.jl is hosted on GitHub, you can install it using the package manager:
+Most of Sparrow's dependencies are installed automatically. Two companion packages are registered (Springsteel and Ronin), while Daisho and Sparrow itself are installed directly from GitHub:
 
 ```julia
 using Pkg
+Pkg.add("Springsteel")
+Pkg.add(url="https://github.com/csu-tropical/Daisho.jl")
+Pkg.add("Ronin")
 Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 ```
 
-### Installing Dependencies
+### Installing the `sparrow` Command
 
-Sparrow.jl has several dependencies that will be automatically installed. However, some external tools may be required for certain operations:
+Workflows are run with the `sparrow` launcher script bundled with the package. When you install Sparrow with the package manager the script lives inside the package directory, so copy it onto your PATH (default `~/.local/bin`) with:
+
+```bash
+julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
+```
+
+After that, `sparrow my_workflow.jl ...` works from any directory. If `~/.local/bin` is not on your PATH the installer prints the line to add to your shell profile. To find the bundled script without installing it, use `Sparrow.sparrow_script_path()` and run it as `julia /path/to/sparrow my_workflow.jl ...`.
+
+### Installing External Tools
+
+Some external tools may be required for certain operations:
 
 - **RadxConvert**: For converting radar data formats
 - **RadxPrint**: For reading radar file metadata
 
-These tools are part of the [LROSE](https://github.com/NCAR/lrose-core) toolkit and should be available in your system PATH if you plan to use the built-in radar processing steps.
+These tools are part of the [LROSE](https://github.com/NCAR/lrose-core) toolkit and should be available in your system PATH if you plan to use the built-in radar processing steps. The simplest example below does not need them.
 
 ## Your First Workflow
 
-Let's create a simple workflow that processes radar data files.
+The smallest possible workflow uses a single pre-built step and no custom code. `PassThroughStep` copies files from your data directory to the archive, which lets you verify that Sparrow is installed and learn the run mechanics before writing any processing logic.
+
+### Step 1: Create a Minimal Workflow File
+
+Create a new file called `my_workflow.jl`:
+
+```julia
+using Sparrow
+
+@workflow_type SimpleWorkflow
+
+workflow = SimpleWorkflow(
+    # Directory configuration
+    base_working_dir = "/tmp/sparrow/work",      # temporary intermediate files
+    base_archive_dir = "/tmp/sparrow/archive",   # final products
+    base_data_dir = "/path/to/your/radar/files", # raw input data (not modified)
+    base_plot_dir = "/tmp/sparrow/plots",        # figures
+
+    # Length of each processing window: seconds, or a string like "20S", "5M", "10H", "1D"
+    span_seconds = "10M",
+
+    # Format: (step_name, step_type, input_directory, archive)
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+### Step 2: Run It
+
+Point `base_data_dir` at any directory of radar files and run the workflow for a day you have data:
+
+```bash
+sparrow my_workflow.jl --datetime 20240101_000000
+```
+
+When it finishes, the files appear under the archive directory organized by date — that's the whole loop: Sparrow chunks the day into `span_seconds` windows, runs each step on each window, and archives the results. Every other workflow is this same pattern with more interesting steps.
+
+From here you can swap in pre-built steps that do real work — see [Provided Workflow Steps](provided_steps.md). For example, `("convert", RadxConvertStep, "base_data", true)` converts raw radar formats to CfRadial (requires LROSE), and the `Grid*Step` family grids CfRadial files using a Daisho TOML configuration supplied via the `daisho_config` parameter.
+
+## Writing Custom Steps
+
+Now let's create a workflow with your own processing logic.
 
 ### Step 1: Create a Workflow File
 
-Create a new file called `my_workflow.jl`:
+Create a file with custom step implementations:
 
 ```julia
 using Sparrow
@@ -128,7 +183,7 @@ end
 Run your workflow from the command line:
 
 ```bash
-julia sparrow my_workflow.jl --datetime 20240101_000000 -v 2
+sparrow my_workflow.jl --datetime 20240101_000000 -v 2
 ```
 
 This will process data from January 1, 2024, 00:00:00 with informational message level.
@@ -138,7 +193,7 @@ This will process data from January 1, 2024, 00:00:00 with informational message
 To use multiple workers for parallel processing:
 
 ```bash
-julia sparrow my_workflow.jl --datetime 20240101_000000 \
+sparrow my_workflow.jl --datetime 20240101_000000 \
     --num_workers 4 --threads 2 -v 2
 ```
 
@@ -149,7 +204,7 @@ This uses 4 distributed workers, each with 2 threads.
 If you're using a Slurm cluster:
 
 ```bash
-julia sparrow my_workflow.jl --datetime 20240101_000000 \
+sparrow my_workflow.jl --datetime 20240101_000000 \
     --slurm --num_workers 10
 ```
 
@@ -169,7 +224,8 @@ Every workflow must have these parameters:
 ### Common Optional Parameters
 
 - `base_plot_dir`: Directory for output plots
-- `span_seconds`: Time span for each processing chunk in seconds (default: 600). The legacy `minute_span` parameter still works but emits a deprecation warning.
+- `span_seconds`: Time span for each processing chunk (default: 600 seconds). Accepts an integer number of seconds (`1200`), a string with a unit code (`"20S"`, `"5M"`, `"10H"`, `"1D"`), or a `Dates.Period` (`Minute(5)`). The legacy `minute_span` parameter still works but emits a deprecation warning.
+- `daisho_config`: Path to a Daisho TOML configuration file, required by the gridding steps. Generate a template with `using Daisho; print_config("daisho.toml")`.
 - `reverse`: Process files in reverse chronological order (default: false)
 - `message_level`: Verbosity level (0-4, default: 2)
 - `raw_moment_names`: Names of radar moments in raw data

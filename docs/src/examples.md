@@ -2,6 +2,33 @@
 
 This page provides complete, practical examples of Sparrow workflows for common use cases.
 
+## Example 0: The Simplest Possible Workflow
+
+A single pre-built step and no custom code — `PassThroughStep` copies files from the data directory to the archive. Use this to verify your installation and learn the run mechanics before building anything more complex:
+
+```julia
+using Sparrow
+
+@workflow_type SimpleWorkflow
+
+workflow = SimpleWorkflow(
+    base_working_dir = "/tmp/sparrow/work",
+    base_archive_dir = "/tmp/sparrow/archive",
+    base_data_dir = "/path/to/your/radar/files",
+    base_plot_dir = "/tmp/sparrow/plots",
+    span_seconds = "10M",
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+Run it for a day you have data:
+
+```bash
+sparrow simple_workflow.jl --datetime 20240101_000000
+```
+
 ## Example 1: Basic Radar Quality Control Workflow
 
 This example demonstrates a simple workflow that converts raw radar data and applies quality control.
@@ -172,7 +199,7 @@ end
 Run this workflow with:
 
 ```bash
-julia sparrow radar_qc_workflow.jl --datetime 20240115_000000 --num_workers 4
+sparrow radar_qc_workflow.jl --datetime 20240115_000000 --num_workers 4
 ```
 
 ## Example 2: Multi-Radar Merge Workflow
@@ -522,7 +549,7 @@ Run this in continuous mode:
 ```bash
 # Process data as it arrives
 while true; do
-    julia sparrow monitor_workflow.jl --datetime now -v 3
+    sparrow monitor_workflow.jl --datetime now -v 3
     sleep 60
 done
 ```

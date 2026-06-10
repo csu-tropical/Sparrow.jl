@@ -21,12 +21,52 @@ Sparrow.jl is a flexible, distributed workflow system for processing radar data.
 
 ### Installation
 
+Springsteel and Ronin are registered packages; Daisho and Sparrow are installed directly from GitHub:
+
 ```julia
 using Pkg
+Pkg.add("Springsteel")
+Pkg.add(url="https://github.com/csu-tropical/Daisho.jl")
+Pkg.add("Ronin")
 Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 ```
 
-### Basic Usage
+Then install the `sparrow` launcher script onto your PATH (default `~/.local/bin`):
+
+```bash
+julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
+```
+
+### The Simplest Workflow
+
+A workflow file defines a workflow type and a `workflow` variable. The smallest possible workflow uses a single pre-built step and no custom code — `PassThroughStep` just copies files from the data directory to the archive, so you can verify your installation before building anything more complex:
+
+```julia
+using Sparrow
+
+@workflow_type SimpleWorkflow
+
+workflow = SimpleWorkflow(
+    base_working_dir = "/tmp/sparrow/work",
+    base_archive_dir = "/tmp/sparrow/archive",
+    base_data_dir = "/path/to/your/radar/files",
+    base_plot_dir = "/tmp/sparrow/plots",
+    span_seconds = "10M",
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+Save as `my_workflow.jl` and run it on a day you have data for:
+
+```bash
+sparrow my_workflow.jl --datetime 20240101_000000
+```
+
+See [Getting Started](getting_started.md) for a walk-through and [Provided Workflow Steps](provided_steps.md) for the ready-made steps (format conversion, QC, gridding, plotting).
+
+### Custom Steps
 
 1. **Define a workflow type** using the `@workflow_type` macro:
 
@@ -75,7 +115,7 @@ end
 5. **Run the workflow** from the command line:
 
 ```bash
-julia sparrow my_workflow.jl --datetime 20240101_000000
+sparrow my_workflow.jl --datetime 20240101_000000
 ```
 
 ## Command Line Interface
@@ -83,7 +123,7 @@ julia sparrow my_workflow.jl --datetime 20240101_000000
 The `sparrow` script provides a command-line interface for running workflows:
 
 ```bash
-julia sparrow [options]
+sparrow workflow.jl [options]
 
 Options:
   workflow                  Workflow file to execute (required, positional)
