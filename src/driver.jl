@@ -79,3 +79,49 @@ function setup_workers(parsed_args)
         msg_info("Plot extension loaded on all workers")
     end
 end
+
+"""
+    sparrow_script_path() → String
+
+Path to the `sparrow` launcher script bundled with the package. The script can
+be run in place (`julia /path/to/sparrow my_workflow.jl ...`) or copied onto
+your `PATH` with [`install_sparrow_script`](@ref).
+"""
+sparrow_script_path() = joinpath(pkgdir(Sparrow), "sparrow")
+
+"""
+    install_sparrow_script(; dest=joinpath(homedir(), ".local", "bin"), force=false) → String
+
+Copy the `sparrow` launcher script into `dest` (created if needed) and make it
+executable, so workflows can be run as `sparrow my_workflow.jl --datetime ...`.
+
+Pass `force=true` to overwrite an existing copy (e.g. after upgrading Sparrow).
+Returns the path of the installed script. Warns if `dest` is not on your
+`PATH`.
+
+# Example
+```bash
+julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
+```
+"""
+function install_sparrow_script(; dest::AbstractString=joinpath(homedir(), ".local", "bin"),
+                                force::Bool=false)
+    src = sparrow_script_path()
+    isfile(src) || error("Bundled sparrow script not found at $src")
+    mkpath(dest)
+    target = joinpath(dest, "sparrow")
+    if isfile(target) && !force
+        error("$target already exists. Pass `force=true` to overwrite it.")
+    end
+    cp(src, target; force=force)
+    chmod(target, 0o755)
+    println("Installed sparrow script to $target")
+    on_path = any(splitpath(abspath(dir)) == splitpath(abspath(dest))
+                  for dir in split(get(ENV, "PATH", ""), ":") if !isempty(dir))
+    if !on_path
+        println("Note: $dest is not on your PATH. Add it with e.g.")
+        println("  export PATH=\"$dest:\$PATH\"   # bash/zsh, add to your shell profile")
+        println("  fish_add_path $dest           # fish")
+    end
+    return target
+end

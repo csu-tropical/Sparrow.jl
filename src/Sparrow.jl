@@ -36,6 +36,7 @@ export GridRHIStep, GridCompositeStep, GridVolumeStep, GridLatlonStep, GridPPISt
 export PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep, PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep
 export MergeVolumesStep, PiccoloMergeStep
 export PassThroughStep, filterByTimeStep
+export sparrow_script_path, install_sparrow_script
 export message, msg_error, msg_warning, msg_info, msg_debug, msg_trace
 export set_message_level, MSG_ERROR, MSG_WARNING, MSG_INFO, MSG_DEBUG, MSG_TRACE
 

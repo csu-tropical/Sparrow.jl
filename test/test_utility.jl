@@ -118,4 +118,21 @@ const HAS_RADXCONVERT = Sys.which("RadxConvert") !== nothing
         @test Sparrow.get_scan_name("/nonexistent/file.nc") == ""
     end
 
+    @testset "sparrow script delivery (issue #5)" begin
+        @test isfile(Sparrow.sparrow_script_path())
+
+        mktempdir() do dir
+            dest = joinpath(dir, "bin")
+            target = Sparrow.install_sparrow_script(dest = dest)
+            @test target == joinpath(dest, "sparrow")
+            @test isfile(target)
+            @test uperm(target) & 0x01 != 0  # owner-executable
+
+            # Refuses to overwrite without force
+            @test_throws ErrorException Sparrow.install_sparrow_script(dest = dest)
+            # force=true overwrites
+            @test Sparrow.install_sparrow_script(dest = dest, force = true) == target
+        end
+    end
+
 end
