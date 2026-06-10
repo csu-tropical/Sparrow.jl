@@ -66,10 +66,13 @@ function _get_ronin_resources(config_path::String)
     key = abspath(config_path)
     cached = get(RONIN_CACHE, key, nothing)
     cached === nothing || return cached
-    msg_info("Loading Ronin config and models from $config_path (one-time per worker)...")
+    msg_info("Loading Ronin config, models, and metadata from $config_path (one-time per worker)...")
     config = load_config(config_path)
-    models = [Ronin.load_model(m, config.task_mode) for m in config.model_output_paths]
-    cached = (config=config, models=models)
+    # One JLD2 read per model that yields both the model and metadata.
+    metadata = [Ronin.load_model_with_metadata(p, config.task_mode)
+                for p in config.model_output_paths]
+    models = Ronin.DecisionTree.RandomForestClassifier[md.model for md in metadata]
+    cached = (config=config, models=models, metadata=metadata)
     RONIN_CACHE[key] = cached
     return cached
 end
@@ -91,6 +94,6 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RoninQCStep}, input_dir
             cp(src, dst; follow_symlinks=true)
         end
         cached = _get_ronin_resources(workflow["ronin_config"])
-        composite_QC(cached.config, output_files, cached.models)
+        composite_QC(cached.config, output_files, cached.models, cached.metadata)
     end
 end
