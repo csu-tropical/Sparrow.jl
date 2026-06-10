@@ -107,4 +107,15 @@ const HAS_RADXCONVERT = Sys.which("RadxConvert") !== nothing
             @info "Skipping get_scan_start tests: RadxPrint not found on PATH"
         end
     end
+
+    @testset "get_scan_name" begin
+        mktempdir() do dir
+            file = joinpath(dir, "cfrad.20240101_000000_TEST_RHI.nc")
+            generate_test_cfradial(file; scan_name = "TEST_RHI")
+            @test Sparrow.get_scan_name(file) == "TEST_RHI"
+        end
+        # Unreadable file falls back to empty string with a warning
+        @test Sparrow.get_scan_name("/nonexistent/file.nc") == ""
+    end
+
 end

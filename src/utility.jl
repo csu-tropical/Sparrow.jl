@@ -87,3 +87,22 @@ function get_scan_start(file)
     # Return a far-past date so callers' time-window filters skip this file
     return DateTime(1970, 1, 1)
 end
+
+"""
+    get_scan_name(file) → String
+
+Read the `scan_name` global attribute from a CfRadial file without loading the
+full volume. Returns an empty string if the attribute is missing or the file
+cannot be read.
+"""
+function get_scan_name(file)
+    try
+        name = NCDataset(file) do ds
+            get(ds.attrib, "scan_name", "")
+        end
+        return strip(String(name))
+    catch e
+        msg_warning("Could not read scan_name from $file: $e")
+        return ""
+    end
+end

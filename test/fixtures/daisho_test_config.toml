@@ -1,0 +1,30 @@
+# Minimal Daisho configuration for Sparrow tests.
+# [fields] and [io] are mandatory; grid sections are added as needed.
+
+[fields]
+DBZ = ["linear_interp", "define_detection"]
+VEL = ["weighted_interp"]
+SQI = ["weighted_interp", "define_scanned"]
+
+[io]
+fill_value = -32768.0
+undetect   =  -9999.0
+
+[grid.cartesian]
+xmin  = -20000.0
+xincr =    500.0
+xdim  =       81
+ymin  = -20000.0
+yincr =    500.0
+ydim  =       81
+zmin  =       0.0
+zincr =     500.0
+zdim  =       21
+
+[grid.rhi]
+rmin  =    0.0
+rincr =  250.0
+rdim  =    81
+zmin  =    0.0
+zincr =  250.0
+zdim  =    41

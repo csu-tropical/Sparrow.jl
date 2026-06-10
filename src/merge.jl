@@ -50,9 +50,6 @@ then merges each group separately. Scan name classification:
 - RHI scans → merged together
 - PICCOLO_LONG, CIRL, CIRC, PICO_LONGVOL, VOL1, NEAR, FAR, HILO → volume 1
 - VOL2 → volume 2
-
-# Configurable parameters (via workflow dict)
-- `qc_moment_dict`: Moment dictionary (required, set by workflow setup)
 """
 function workflow_step(workflow::SparrowWorkflow, ::Type{PiccoloMergeStep},
                        input_dir::String, output_dir::String;
@@ -60,8 +57,6 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PiccoloMergeStep},
                        step_name::String, kwargs...)
 
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
-
-    qc_moment_dict = workflow["qc_moment_dict"]
 
     mkpath(output_dir)
     volume1 = Set{String}()
@@ -78,8 +73,7 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PiccoloMergeStep},
             continue
         end
 
-        radar_volume = Daisho.read_cfradial(file, qc_moment_dict)
-        scan_name = radar_volume.scan_name
+        scan_name = get_scan_name(file)
 
         if contains(scan_name, "RHI")
             push!(rhis, file)

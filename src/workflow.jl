@@ -94,6 +94,25 @@ function get_param(workflow::SparrowWorkflow, key::String, ::Type{T}) where {T}
 end
 
 """
+    get_daisho_params(workflow::SparrowWorkflow) → DaishoParameters
+
+Get the Daisho parameters built from the workflow's `daisho_config` TOML file.
+
+Throws an error with setup instructions if the workflow has no `daisho_config`
+parameter. Steps that grid or otherwise call into Daisho should use this
+accessor rather than reading `workflow["daisho_params"]` directly.
+"""
+function get_daisho_params(workflow::SparrowWorkflow)
+    if haskey(workflow.params, "daisho_params")
+        return workflow["daisho_params"]::DaishoParameters
+    end
+    error("This workflow step requires a Daisho TOML configuration. Add " *
+          "`daisho_config = \"/path/to/daisho.toml\"` to your workflow parameters. " *
+          "Generate a template with `using Daisho; print_config(\"daisho.toml\")` " *
+          "and edit it for your radar.")
+end
+
+"""
     get_data_source(workflow::SparrowWorkflow) → DataSource
 
 Get the data source for a workflow. If `data_source` is set in the workflow
@@ -394,9 +413,13 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
         workflow["force_reprocess"] = get_param(workflow, "force_reprocess", false)
     end
 
-    # Add the daisho config to the workflow dict so they can be accessed by the worker processes
-    daisho_params = DaishoParameters(workflow["daisho_config"])
-    workflow["daisho_params"] = daisho_params
+    # Build the Daisho parameters once on the main process so the TOML is
+    # validated before any workers start; the struct is plain data and ships
+    # to the workers with the rest of the workflow params. Workflows without
+    # gridding steps don't need a daisho_config at all.
+    if haskey(workflow.params, "daisho_config")
+        workflow["daisho_params"] = DaishoParameters(workflow["daisho_config"])
+    end
 
     return workflow
 end

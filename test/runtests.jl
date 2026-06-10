@@ -106,6 +106,10 @@ end
     include("test_chunking.jl")
 end
 
+@testset "Grid Configuration" begin
+    include("test_grid.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin
