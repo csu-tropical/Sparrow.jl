@@ -25,7 +25,50 @@ function _capture_stdout(f)
     return result, output
 end
 
+@testset "parse_span_seconds" begin
+
+    @testset "integers pass through as seconds" begin
+        @test Sparrow.parse_span_seconds(600) == 600
+        @test Sparrow.parse_span_seconds(20) == 20
+    end
+
+    @testset "strings with unit codes" begin
+        @test Sparrow.parse_span_seconds("90") == 90
+        @test Sparrow.parse_span_seconds("20S") == 20
+        @test Sparrow.parse_span_seconds("20s") == 20
+        @test Sparrow.parse_span_seconds("5M") == 300
+        @test Sparrow.parse_span_seconds("5m") == 300
+        @test Sparrow.parse_span_seconds("10H") == 36000
+        @test Sparrow.parse_span_seconds("1D") == 86400
+        @test Sparrow.parse_span_seconds(" 15 M ") == 900
+    end
+
+    @testset "Dates.Period values" begin
+        @test Sparrow.parse_span_seconds(Sparrow.Dates.Minute(5)) == 300
+        @test Sparrow.parse_span_seconds(Sparrow.Dates.Hour(10)) == 36000
+        @test Sparrow.parse_span_seconds(Sparrow.Dates.Second(20)) == 20
+    end
+
+    @testset "invalid specifications throw" begin
+        @test_throws ErrorException Sparrow.parse_span_seconds("5X")
+        @test_throws ErrorException Sparrow.parse_span_seconds("M5")
+        @test_throws ErrorException Sparrow.parse_span_seconds("")
+        @test_throws ErrorException Sparrow.parse_span_seconds(5.5)
+    end
+end
+
 @testset "resolve_span_seconds" begin
+
+    @testset "string span codes resolve and cache as Int" begin
+        wf = ChunkingTestWorkflow(span_seconds = "5M")
+        @test Sparrow.resolve_span_seconds(wf) == 300
+        @test wf["span_seconds"] === 300
+    end
+
+    @testset "non-positive spans throw" begin
+        wf = ChunkingTestWorkflow(span_seconds = 0)
+        @test_throws ErrorException Sparrow.resolve_span_seconds(wf)
+    end
 
     @testset "returns span_seconds when set" begin
         wf = ChunkingTestWorkflow(span_seconds = 30)

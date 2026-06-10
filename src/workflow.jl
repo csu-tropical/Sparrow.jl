@@ -127,13 +127,53 @@ function get_data_source(workflow::SparrowWorkflow)
 end
 
 """
+    parse_span_seconds(span) → Int
+
+Convert a span specification to a whole number of seconds. Accepts:
+
+- `Integer`: seconds, passed through.
+- `Dates.Period`: any fixed-length period, e.g. `Minute(5)` or `Hour(10)`.
+- `AbstractString`: a number with an optional unit code — `"90"` or `"90S"`
+  (seconds), `"5M"` (minutes), `"10H"` (hours), `"1D"` (days). Unit codes are
+  case-insensitive.
+
+Throws an error for anything else.
+"""
+parse_span_seconds(span::Integer) = Int(span)
+parse_span_seconds(span::Dates.Period) = Dates.value(convert(Dates.Second, span))
+function parse_span_seconds(span::AbstractString)
+    m = match(r"^\s*(\d+)\s*([a-zA-Z]?)\s*$", span)
+    if m === nothing
+        error("Invalid span specification \"$span\". Use a number of seconds or " *
+              "a number with a unit code: \"90S\" (seconds), \"5M\" (minutes), " *
+              "\"10H\" (hours), \"1D\" (days).")
+    end
+    number = parse(Int, m.captures[1])
+    unit = lowercase(m.captures[2])
+    multiplier = unit == "" || unit == "s" ? 1 :
+                 unit == "m" ? 60 :
+                 unit == "h" ? 3600 :
+                 unit == "d" ? 86400 :
+                 error("Unknown span unit code \"$(m.captures[2])\" in \"$span\". " *
+                       "Valid codes are S (seconds), M (minutes), H (hours), D (days).")
+    return number * multiplier
+end
+parse_span_seconds(span) =
+    error("Invalid span specification $span of type $(typeof(span)). " *
+          "Use a number of seconds, a string like \"5M\", or a Dates.Period.")
+
+"""
     resolve_span_seconds(workflow::SparrowWorkflow) → Int
 
 Resolve the chunk-span (in seconds) used by [`process_workflow`](@ref) to slice
 time ranges into successive processing windows.
 
 Resolution order:
-1. `span_seconds` if present in `workflow.params`.
+1. `span_seconds` if present in `workflow.params`, parsed with
+   [`parse_span_seconds`](@ref) — so it may be given as seconds (`1200`),
+   a string with a unit code (`"20S"`, `"5M"`, `"10H"`, `"1D"`), or a
+   `Dates.Period` (`Minute(5)`). The parsed value is cached back into the
+   workflow as an `Int`.
 2. Deprecated `minute_span` if present: converted to seconds (×60), the
    workflow is mutated in place to drop `minute_span` and set `span_seconds`,
    and a one-time warning is emitted.
@@ -141,7 +181,10 @@ Resolution order:
 """
 function resolve_span_seconds(workflow::SparrowWorkflow)
     if haskey(workflow.params, "span_seconds")
-        return workflow["span_seconds"]::Int
+        seconds = parse_span_seconds(workflow["span_seconds"])
+        seconds > 0 || error("span_seconds must be positive, got $seconds")
+        workflow["span_seconds"] = seconds
+        return seconds
     elseif haskey(workflow.params, "minute_span")
         seconds = (workflow["minute_span"]::Int) * 60
         msg_warning("Workflow parameter `minute_span` is deprecated; " *
