@@ -1,0 +1,123 @@
+# Daisho gridding configuration for the PICCOLO dual-pol radar.
+#
+# Used by workflows/Piccolo_gridding_workflow.jl. Generate a fresh template
+# with `using Daisho; print_config("daisho.toml")` if you need sections not
+# shown here. Loading is strict: unknown keys are errors.
+#
+# [fields] and [io] are mandatory. The [grid.*] sub-tables are each optional
+# and only consumed by the matching driver:
+#   [grid.cartesian] -> volume, composite, PPI, and QVP (column) products
+#   [grid.latlon]    -> lat/lon geographic volume
+#   [grid.rhi]       -> RHI products
+
+# Field selection, interpolation, and gridding roles.
+#   *_interp        : interpolation mode (linear / weighted / nearest)
+#   define_detection: field whose presence proves a detectable echo (old valid_key = DBZ)
+#   define_scanned  : field whose presence proves the gate was scanned (old missing_key = PID_FOR_QC)
+#   velocity        : tags the radial-velocity field
+# Field names match the QC moment names from Piccolo_dualpol_workflow.jl.
+[fields]
+DBZ              = ["linear_interp", "define_detection"]
+ZDR              = ["linear_interp"]
+PID_FOR_QC       = ["nearest_interp", "define_scanned"]
+HID_CSU          = ["nearest_interp"]
+VEL              = ["weighted_interp", "velocity"]
+KDP              = ["weighted_interp"]
+RHOHV            = ["weighted_interp"]
+WIDTH            = ["weighted_interp"]
+PHIDP            = ["weighted_interp"]
+SQI              = ["weighted_interp"]
+RATE_CSU_BLENDED = ["weighted_interp"]
+
+# Missing/undetect sentinels written to the NetCDF output.
+[io]
+fill_value = -32768.0   # CF _FillValue  -- true missing (gate not measured)
+undetect   =  -9999.0   # ODIM _Undetect -- scanned, no detectable signal
+
+# Gridding weights and thresholds. The old per-product power thresholds
+# (ppi/rhi/qvp) and beam_inflation no longer exist; there is one power
+# threshold plus radius-of-influence factors for all Cartesian products.
+[gridding]
+power_threshold     = 0.25
+horizontal_roi_factor = 0.75
+vertical_roi_factor   = 0.75
+range_floor           = 1.0
+range_weight_max      = 10.0
+
+# Shared Cartesian base geometry. Products without their own [grid.<product>]
+# section inherit this. Here it is the 245 km "long" grid, which the composite
+# and PPI products use (they had no override below, matching the old workflow).
+[grid.cartesian]
+xmin  = -245000.0
+xincr =    1000.0
+xdim  =      491
+ymin  = -245000.0
+yincr =    1000.0
+ydim  =      491
+zmin  =       0.0
+zincr =    1000.0
+zdim  =       19
+
+# Volume grid: the 120 km "vol" geometry from the old workflow.
+[grid.volume]
+xmin  = -120000.0
+xincr =    1000.0
+xdim  =      241
+ymin  = -120000.0
+yincr =    1000.0
+ydim  =      241
+zmin  =       0.0
+zincr =    1000.0
+zdim  =       19
+
+# QVP/column grid: only the z-axis is used (x/y carried for schema completeness).
+# Fine 100 m vertical spacing to 18 km, matching the old qvp_z* parameters.
+[grid.column]
+xmin  =  -18000.0
+xincr =     100.0
+xdim  =      361
+ymin  =  -18000.0
+yincr =     100.0
+ydim  =      361
+zmin  =       0.0
+zincr =     100.0
+zdim  =      181
+
+# Geographic (lat/lon) grid, offsets relative to the radar origin in degrees.
+[grid.latlon]
+lonmin  = -1.0
+londim  = 101
+latmin  = -1.0
+latdim  = 101
+degincr = 0.02
+zmin    = 0.0
+zincr   = 1000.0
+zdim    = 19
+
+# RHI (range-height) grid.
+[grid.rhi]
+rmin  =    0.0
+rincr =  250.0
+rdim  =  481
+zmin  =    0.0
+zincr =  250.0
+zdim  =   73
+
+# CF-1.12 global attributes written to every gridded NetCDF file.
+[grid.metadata]
+Conventions      = "CF-1.12"
+history          = "Sparrow.jl / Daisho.jl gridding"
+institution      = "Colorado State University"
+source           = "SEA-POL C-band dual-pol radar"
+instrument       = "SEAPOL"
+title            = "PICCOLO Gridded Radar Data"
+summary          = "PICCOLO gridded dual-pol radar moments"
+creator_name     = "Michael Bell"
+creator_email    = "mmbell@colostate.edu"
+creator_id       = ""
+project          = "PICCOLO"
+platform         = "R/V Research Vessel"
+keywords         = "radar, precipitation, dual-pol"
+processing_level = "Level 4"
+license          = "CC-BY-4.0"
+references       = ""

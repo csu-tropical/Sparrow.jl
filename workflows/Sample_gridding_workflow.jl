@@ -36,9 +36,14 @@ workflow = GridWorkflow(
     # `using Daisho; print_config("daisho.toml")` and edit it for your radar:
     #   [fields]          - moments to grid, interpolation type, and special tags
     #   [gridding]        - power threshold and weighting options
-    #   [grid.cartesian]  - x/y/z extents for volume, composite, and PPI grids
+    #   [grid.cartesian]  - shared base x/y/z extents for the Cartesian products
+    #   [grid.volume]     - optional override for the 3D volume grid
+    #   [grid.composite]  - optional override for the composite grid
+    #   [grid.ppi]        - optional override for the PPI grid
+    #   [grid.column]     - optional override for the QVP/column grid (z-axis)
     #   [grid.rhi]        - range/height extents for RHI grids
     #   [grid.latlon]     - lat/lon extents for geographic grids
+    # Each [grid.<product>] section inherits [grid.cartesian] when omitted.
     daisho_config = "/path/to/daisho.toml",
 
     # Max PPI angle is in degrees and is used to restrict which elevations get gridded (e.g. < 1.0)
