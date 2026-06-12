@@ -5,6 +5,11 @@
 # product Daisho offers (RHI, composite, volume, lat/lon, PPI, QVP). All grid
 # geometry, field selection, interpolation, and weighting live in the Daisho
 # TOML referenced by daisho_config -- see Piccolo_gridding.toml.
+#
+# Plot steps require the plotting dependencies, loaded here so the SparrowPlotExt
+# extension is active before the workflow runs.
+using CairoMakie, GeoMakie, ColorSchemes, Images
+
 @workflow_type PiccoloGriddingWorkflow
 workflow = PiccoloGriddingWorkflow(
 
@@ -26,8 +31,11 @@ workflow = PiccoloGriddingWorkflow(
     # thresholds, CF metadata) comes from this Daisho TOML file.
     daisho_config = "/Users/mmbell/Development/Sparrow.jl/workflows/Piccolo_gridding.toml",
 
-    # Grid every product Daisho supports. Each step reads the merged CfRadial
-    # files in base_data; archive=true keeps the product, false deletes it.
+    # Grid every product Daisho supports, then plot the 2D products. Each grid
+    # step reads the merged CfRadial files in base_data; archive=true keeps the
+    # product, false deletes it. Each plot step's input_directory is the grid
+    # step it plots (it reads that step's gridded NetCDF). Plot steps write their
+    # PNGs straight to base_plot_dir and so are archive=false.
     #   Format: (step_name, step_type, input_directory, archive)
     steps = [
         ("rhi",       GridRHIStep,       "base_data", true),
@@ -36,6 +44,13 @@ workflow = PiccoloGriddingWorkflow(
         ("latlon",    GridLatlonStep,    "base_data", true),
         ("ppi",       GridPPIStep,       "base_data", true),
         ("qvp",       GridQVPStep,       "base_data", true),
+
+        # Plots of the 2D products (figures land in base_plot_dir/<name>/<date>).
+        # The 3D volume/latlon and the QVP column profile have no plotter yet.
+        ("plot_rhi",       PlotRHIStep,          "rhi",       false),
+        ("plot_composite", PlotDBZCompositeStep, "composite", false),
+        ("plot_ppi",       PlotDBZVelStep,       "ppi",       false),
+        ("plot_ppi_vol",   PlotPPIVolStep,       "ppi",       false),
     ],
 
     # PPI step grids every sweep with fixed_angle <= max_ppi_angle (degrees).

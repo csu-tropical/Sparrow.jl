@@ -1,5 +1,8 @@
-# Sample workflow: Grid RHI data and plot the results
-# To use plotting steps, load the plotting dependencies before running:
+# Sample workflow: Grid RHI data and plot the results.
+#
+# All grid geometry and field configuration come from the Daisho TOML referenced
+# by `daisho_config` (the new Fields API). To use plotting steps, load the
+# plotting dependencies before running:
 #   using CairoMakie, GeoMakie, ColorSchemes, Images
 
 using CairoMakie, GeoMakie, ColorSchemes, Images
@@ -8,7 +11,7 @@ using CairoMakie, GeoMakie, ColorSchemes, Images
 workflow = RHIPlotWorkflow(
 
     # Working directory is a temporary directory for intermediate products
-    # Archive directory is where final products are stored
+    # Archive directory is where final gridded products are stored
     # Plot directory is where figures are stored
     # Data directory is where raw data is located (symlinked, not modified)
     # Override with --paths_file for different machines/data
@@ -23,36 +26,22 @@ workflow = RHIPlotWorkflow(
     # Process in chronological order
     reverse = false,
 
+    # All gridding + field configuration (grid geometry, fields, interpolation,
+    # tags, thresholds, CF metadata) comes from this Daisho TOML. Generate a
+    # template with `using Daisho; print_config("daisho.toml")` and edit it, or
+    # point at an existing one (e.g. workflows/Piccolo_gridding.toml).
+    daisho_config = "/path/to/daisho.toml",
+
+    # Step 1 grids the raw RHI scans; step 2 plots the gridded RHIs (reading
+    # step 1's output). The plot step writes PNGs to base_plot_dir, so archive=false.
     steps = [
-        # Step 1: Grid the raw RHI scans
         ("rhi_grid", GridRHIStep, "base_data", true),
-        # Step 2: Plot the gridded RHI data (uses output from step 1)
-        ("rhi_plot", PlotRHIStep, "rhi_grid", true),
+        ("rhi_plot", PlotRHIStep, "rhi_grid", false),
     ],
 
-    # Moment configuration
-    raw_moment_names = ["DBZ", "VEL", "ZDR", "RHOHV", "KDP", "PHIDP", "SQI"],
-    qc_moment_names = ["DBZ", "VEL", "ZDR", "RHOHV", "KDP", "PHIDP", "SQI"],
-    moment_grid_type = [:linear, :linear, :linear, :linear, :weighted, :linear, :linear],
-
-    missing_key = "SQI",
-    valid_key = "DBZ",
-
-    # RHI grid parameters (meters)
-    rmin = 0.0,
-    rincr = 250.0,
-    rdim = 481,
-
-    rhi_zmin = 0.0,
-    rhi_zincr = 250.0,
-    rhi_zdim = 73,
-
-    # Daisho gridding weights
-    beam_inflation = 0.0175,
-    power_threshold = 0.25,
-    rhi_power_threshold = 0.50,
-
-    # Plot parameters (all optional -- defaults are used if omitted)
+    # Plot parameters (all optional -- defaults are used if omitted). Field roles
+    # (reflectivity, velocity) come from the Daisho config tags; the remaining
+    # dual-pol panels default to conventional names (zdr_field, kdp_field, ...).
     radar_name = "MyRadar",
     file_prefix = "MyRadar",
     rhi_plot_size = (1500, 1200),

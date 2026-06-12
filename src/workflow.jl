@@ -113,6 +113,20 @@ function get_daisho_params(workflow::SparrowWorkflow)
 end
 
 """
+    plot_output_dir(workflow, step_name, start_time, fallback) → String
+
+Destination directory for a plot step's figures: `base_plot_dir/<step_name>/<date>`.
+Falls back to the step's working `output_dir` (`fallback`) when `base_plot_dir`
+is unset. Plot steps write here directly (and are declared `archive=false`),
+since the archive machinery only routes archived output to `base_archive_dir`.
+"""
+function plot_output_dir(workflow::SparrowWorkflow, step_name, start_time, fallback)
+    base = get_param(workflow, "base_plot_dir", nothing)
+    base === nothing && return fallback
+    return joinpath(base, step_name, Dates.format(start_time, "YYYYmmdd"))
+end
+
+"""
     get_data_source(workflow::SparrowWorkflow) → DataSource
 
 Get the data source for a workflow. If `data_source` is set in the workflow

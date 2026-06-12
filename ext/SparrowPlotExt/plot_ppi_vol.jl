@@ -3,15 +3,16 @@
 
 Plot multi-panel PPI volume scan with all elevation angles in a single figure.
 
+Reads gridded PPI NetCDF via the Daisho Fields API; reflectivity resolves from
+the `define_detection` tag and blanking from `define_scanned`.
+
 # Configurable parameters (via workflow dict, with defaults)
-- `radar_name`: Name in titles (default: `"Sparrow"`)
-- `file_prefix`: Output filename prefix (default: `"Sparrow"`)
-- `plot_width`, `plot_height`: Axis size in pixels (default: `400`)
-- `dbz_levels`: DBZ contour levels (default: `range(-10, 45)`)
-- `dbz_colormap`: DBZ colormap (default: `:chaseSpectral`)
-- `xdim`, `ydim`: Grid dimensions (default: `251`)
-- `ppi_vol_columns`: Number of layout columns (default: `3`)
-- `marker_lon`, `marker_lat`: Optional scatter marker position (default: `nothing`)
+- `radar_name`, `file_prefix`: title / filename prefix (default: `"Sparrow"`)
+- `plot_width`, `plot_height`: axis size in pixels (default: `400`)
+- `dbz_levels`/`dbz_colormap`/`dbz_ticks`: contour levels, colormap, colorbar ticks
+- `ppi_vol_columns`: number of layout columns (default: `3`)
+- `blank_color`: color for un-scanned regions (default: `(:gray, 0.5)`)
+- `marker_lon`, `marker_lat`: optional scatter marker position (default: `nothing`)
 """
 function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
                        input_dir::String, output_dir::String;
@@ -21,20 +22,24 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     ensure_colorschemes()
 
-    moment_dict = workflow["qc_moment_dict"]
+    p = get_daisho_params(workflow)
+    refl_field    = role_field(p, :define_detection, "PPI volume plot")
+    scanned_field = role_field(p, :define_scanned, "PPI volume plot")
+
     radar_name = get_param(workflow, "radar_name", "Sparrow")
     file_prefix = get_param(workflow, "file_prefix", "Sparrow")
     plot_width = get_param(workflow, "plot_width", 400)
     plot_height = get_param(workflow, "plot_height", 400)
     dbz_levels = get_param(workflow, "dbz_levels", range(-10, 45))
     dbz_colormap = get_param(workflow, "dbz_colormap", :chaseSpectral)
-    xdim = get_param(workflow, "xdim", 251)
-    ydim = get_param(workflow, "ydim", 251)
+    dbz_ticks = get_param(workflow, "dbz_ticks", -10:5:45)
     ppi_vol_columns = get_param(workflow, "ppi_vol_columns", 3)
+    blank_color = get_param(workflow, "blank_color", (:gray, 0.5))
     marker_lon = get_param(workflow, "marker_lon", nothing)
     marker_lat = get_param(workflow, "marker_lat", nothing)
 
-    mkpath(output_dir)
+    out_dir = plot_output_dir(workflow, step_name, start_time, output_dir)
+    mkpath(out_dir)
     files = readdir(input_dir; join=true)
     filter!(!isdir, files)
 
@@ -44,11 +49,7 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
     end
 
     date = Dates.format(start_time, "YYYYmmdd")
-    x_center = Int((xdim-1)/2 + 1)
-    y_center = Int((ydim-1)/2 + 1)
-
-    # Use chaseSpectral colormap
-    dbz_cmap = dbz_colormap == :chaseSpectral ? colorschemes[:chaseSpectral] : dbz_colormap
+    blanking_cbar = [blank_color]
     num_columns = length(files) > 2 ? ppi_vol_columns : 2
 
     fig = Figure()
@@ -57,19 +58,17 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
     row = 1
     col = 0
     for f in 1:length(files)
-        x, y, lat, lon, start_t, stop_t, radardata = Daisho.read_gridded_ppi(files[f], moment_dict)
+        g = Daisho.read_gridded_ppi(files[f], p)
+        xdim = length(g.X); ydim = length(g.Y)
+        lon = g.longitude; lat = g.latitude
+        x_center = Int((xdim-1)/2 + 1)
+        y_center = Int((ydim-1)/2 + 1)
 
-        sqi = reshape(radardata[moment_dict["SQI"],:], xdim, ydim)
-        sqiraster = nomissing(sqi[:,:], -32768.0)
-        blanking = ifelse.(sqiraster .> -32768.0, NaN, 0.0)
+        blanking = scanned_blanking(g, scanned_field)
+        dbz = masked(g, refl_field, "PPI volume plot")
 
-        dbz = reshape(radardata[moment_dict["DBZ"],:], xdim, ydim)
-        dbz = nomissing(dbz[:,:], -32768.0)
-        replace!(dbz, -32768.0 => NaN)
-        replace!(dbz, -9999.0 => NaN)
-
-        start_str = Dates.format(DateTime(start_t[1]), "HHMM")
-        stop_str = Dates.format(DateTime(stop_t[1]), "HHMM")
+        start_str = Dates.format(DateTime(g.start_time[1]), "HHMM")
+        stop_str = Dates.format(DateTime(g.stop_time[1]), "HHMM")
         timestr = date * " " * start_str * "-" * stop_str * " UTC"
 
         elevation = chop(split(files[f], "_")[end], tail=3)
@@ -86,33 +85,30 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
             title = "$(radar_name) $timestr Reflectivity at $(elevation)°",
             xlabel = "Longitude", ylabel = "Latitude")
 
-        center_lon = lon[x_center, y_center]
-        center_lat = lat[x_center, y_center]
         xlims!(ax[f], lon[1, y_center], lon[xdim, y_center])
         ylims!(ax[f], lat[x_center, 1], lat[x_center, ydim])
 
-        blanking_cbar = [(:gray, 0.5)]
         contourf!(ax[f], lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
-            colormap = blanking_cbar, extendlow = (:gray, 0.5))
+            colormap = blanking_cbar, extendlow = blank_color)
         composite = contourf!(ax[f], lon[:,y_center], lat[x_center,:], dbz[:,:], levels = dbz_levels,
-            colormap = dbz_cmap)
+            colormap = cmap(dbz_colormap))
         if marker_lon !== nothing && marker_lat !== nothing
             scatter!(ax[f], marker_lon, marker_lat, marker=:diamond, markersize = 5, color = :black)
         end
         colsize!(fig.layout, 1, Aspect(1, 1.0))
         if col == num_columns || f == length(files)
-            Colorbar(fig[row, num_columns + 1], composite, ticks = -10:5:45, label = "dBZ")
+            Colorbar(fig[row, num_columns + 1], composite, ticks = dbz_ticks, label = "dBZ")
         end
     end
 
     resize_to_layout!(fig)
 
     # Get volume start/stop times from first and last files
-    x, y, lat, lon, start_vol, stop_t, radardata = Daisho.read_gridded_ppi(files[1], moment_dict)
-    x, y, lat, lon, start_t, stop_vol, radardata = Daisho.read_gridded_ppi(files[end], moment_dict)
-    start_str = Dates.format(DateTime(start_vol[1]), "HHMM")
-    stop_str = Dates.format(DateTime(stop_vol[1]), "HHMM")
+    g_first = Daisho.read_gridded_ppi(files[1], p)
+    g_last = Daisho.read_gridded_ppi(files[end], p)
+    start_str = Dates.format(DateTime(g_first.start_time[1]), "HHMM")
+    stop_str = Dates.format(DateTime(g_last.stop_time[1]), "HHMM")
 
-    outfile = joinpath(output_dir, "$(file_prefix)_VOL_$(date)_$(start_str)-$(stop_str).png")
+    outfile = joinpath(out_dir, "$(file_prefix)_VOL_$(date)_$(start_str)-$(stop_str).png")
     save(outfile, fig)
 end

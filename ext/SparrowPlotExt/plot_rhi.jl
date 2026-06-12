@@ -1,27 +1,20 @@
 """
     PlotRHIStep
 
-Plot 6-panel RHI display: DBZ, velocity, ZDR, RhoHV, KDP, PhiDP.
+Plot 6-panel RHI display: reflectivity, velocity, ZDR, RhoHV, KDP, PhiDP.
+
+Reads gridded RHI NetCDF via the Daisho Fields API. The reflectivity and
+velocity panels resolve their field from the Daisho config tags
+(`define_detection`, `velocity`); the remaining dual-pol fields default to
+conventional names and are overridable.
 
 # Configurable parameters (via workflow dict, with defaults)
-- `radar_name`: Name in titles (default: `"Sparrow"`)
-- `file_prefix`: Output filename prefix (default: `"Sparrow"`)
-- `rdim`: Range dimension (default: `501`)
-- `rhi_zdim`: Height dimension (default: `51`)
-- `rhi_plot_size`: Figure size tuple (default: `(1500, 1200)`)
-- `rhi_aspect`: Panel aspect ratio (default: `7.5`)
-- `rhi_range_max`: Max range in km (default: `120.0`)
-- `rhi_height_max`: Max height in km (default: `16.0`)
-- `dbz_levels`: DBZ contour levels (default: `range(-4, 60, step=4)`)
-- `vel_levels`: Velocity levels (default: `range(-32, 32, step=4)`)
-- `vel_colormap`: Velocity colormap (default: `:balance`)
-- `zdr_levels`: ZDR levels (default: `range(-0.5, 3.5, step=0.2)`)
-- `zdr_colormap`: ZDR colormap (default: `:PRGn`)
-- `rhohv_levels`: RhoHV levels (default: `range(0.8, 1.0, step=0.01)`)
-- `kdp_levels`: KDP levels (default: `range(-1, 4, step=0.1)`)
-- `kdp_colormap`: KDP colormap (default: `Reverse(:RdYlGn)`)
-- `phidp_levels`: PhiDP levels (default: `range(0, 360)`)
-- `phidp_colormap`: PhiDP colormap (default: `:davos`)
+- `radar_name`, `file_prefix`: title / filename prefix (default: `"Sparrow"`)
+- `zdr_field`/`kdp_field`/`phidp_field`/`rhohv_field`: field names for the
+  non-role panels (defaults `"ZDR"`/`"KDP"`/`"PHIDP"`/`"RHOHV"`)
+- `rhi_plot_size`, `rhi_aspect`, `rhi_range_max`, `rhi_height_max`: figure geometry
+- `*_levels`, `*_colormap`, `*_ticks`: per-panel contour levels, colormaps, and
+  colorbar ticks (defaults preserve the prior appearance)
 """
 function workflow_step(workflow::SparrowWorkflow, ::Type{PlotRHIStep},
                        input_dir::String, output_dir::String;
@@ -31,64 +24,61 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotRHIStep},
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     ensure_colorschemes()
 
-    moment_dict = workflow["qc_moment_dict"]
+    p = get_daisho_params(workflow)
+    refl_field  = role_field(p, :define_detection, "RHI plot")
+    vel_field   = role_field(p, :velocity, "RHI plot")
+    zdr_field   = get_param(workflow, "zdr_field", "ZDR")
+    kdp_field   = get_param(workflow, "kdp_field", "KDP")
+    phidp_field = get_param(workflow, "phidp_field", "PHIDP")
+    rhohv_field = get_param(workflow, "rhohv_field", "RHOHV")
+
     radar_name = get_param(workflow, "radar_name", "Sparrow")
     file_prefix = get_param(workflow, "file_prefix", "Sparrow")
-    rdim = get_param(workflow, "rdim", 501)
-    rhi_zdim = get_param(workflow, "rhi_zdim", 51)
     rhi_plot_size = get_param(workflow, "rhi_plot_size", (1500, 1200))
     rhi_aspect = get_param(workflow, "rhi_aspect", 7.5)
     rhi_range_max = get_param(workflow, "rhi_range_max", 120.0)
     rhi_height_max = get_param(workflow, "rhi_height_max", 16.0)
     dbz_levels = get_param(workflow, "dbz_levels", range(-4, 60, step=4))
+    dbz_colormap = get_param(workflow, "dbz_colormap", :chaseSpectral)
     vel_levels = get_param(workflow, "vel_levels", range(-32, 32, step=4))
     vel_colormap = get_param(workflow, "vel_colormap", :balance)
     zdr_levels = get_param(workflow, "zdr_levels", range(-0.5, 3.5, step=0.2))
     zdr_colormap = get_param(workflow, "zdr_colormap", :PRGn)
     rhohv_levels = get_param(workflow, "rhohv_levels", range(0.8, 1.0, step=0.01))
+    rhohv_colormap = get_param(workflow, "rhohv_colormap", :romaRhoHV)
     kdp_levels = get_param(workflow, "kdp_levels", range(-1, 4, step=0.1))
     kdp_colormap = get_param(workflow, "kdp_colormap", Reverse(:RdYlGn))
     phidp_levels = get_param(workflow, "phidp_levels", range(0, 360))
     phidp_colormap = get_param(workflow, "phidp_colormap", :davos)
+    dbz_ticks = get_param(workflow, "dbz_ticks", 0:10:60)
+    vel_ticks = get_param(workflow, "vel_ticks", -32:8:32)
+    zdr_ticks = get_param(workflow, "zdr_ticks", -0.5:0.5:3.5)
+    rhohv_ticks = get_param(workflow, "rhohv_ticks", 0.8:0.05:1.0)
+    kdp_ticks = get_param(workflow, "kdp_ticks", -1:1:4)
+    phidp_ticks = get_param(workflow, "phidp_ticks", 0:45:360)
 
-    mkpath(output_dir)
+    out_dir = plot_output_dir(workflow, step_name, start_time, output_dir)
+    mkpath(out_dir)
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
 
     for file in input_files
-        r, z, lat, lon, start_t, stop_t, radardata = Daisho.read_gridded_rhi(file, moment_dict)
+        g = Daisho.read_gridded_rhi(file, p)
 
-        # Convert to km
-        r = r ./ 1000.0
-        z = z ./ 1000.0
+        # Convert coordinates to km
+        r = g.R ./ 1000.0
+        z = g.Z ./ 1000.0
 
-        dbz = reshape(radardata[moment_dict["DBZ"],:], rdim, rhi_zdim)
-        dbz = nomissing(dbz[:,:], -32768.0)
-        replace!(dbz, -32768.0 => NaN)
-
-        vel = reshape(radardata[moment_dict["VEL"],:], rdim, rhi_zdim)
-        vel = nomissing(vel[:,:], -32768.0)
-        replace!(vel, -32768.0 => NaN)
-
-        zdr = reshape(radardata[moment_dict["ZDR"],:], rdim, rhi_zdim)
-        zdr = nomissing(zdr[:,:], -32768.0)
-        replace!(zdr, -32768.0 => NaN)
-
-        kdp = reshape(radardata[moment_dict["KDP"],:], rdim, rhi_zdim)
-        kdp = nomissing(kdp[:,:], -32768.0)
-        replace!(kdp, -32768.0 => NaN)
-
-        phidp = reshape(radardata[moment_dict["PHIDP"],:], rdim, rhi_zdim)
-        phidp = nomissing(phidp[:,:], -32768.0)
-        replace!(phidp, -32768.0 => NaN)
-
-        rhohv = reshape(radardata[moment_dict["RHOHV"],:], rdim, rhi_zdim)
-        rhohv = nomissing(rhohv[:,:], -32768.0)
-        replace!(rhohv, -32768.0 => NaN)
+        dbz   = masked(g, refl_field,  "RHI plot")
+        vel   = masked(g, vel_field,   "RHI plot")
+        zdr   = masked(g, zdr_field,   "RHI plot")
+        kdp   = masked(g, kdp_field,   "RHI plot")
+        phidp = masked(g, phidp_field, "RHI plot")
+        rhohv = masked(g, rhohv_field, "RHI plot")
 
         date = Dates.format(start_time, "YYYYmmdd")
-        start_str = Dates.format(DateTime(start_t[1]), "HHMM")
-        stop_str = Dates.format(DateTime(stop_t[1]), "HHMM")
+        start_str = Dates.format(DateTime(g.start_time[1]), "HHMM")
+        stop_str = Dates.format(DateTime(g.stop_time[1]), "HHMM")
         timestr = date * " " * start_str * "-" * stop_str * " UTC"
 
         angle = chop(split(file, "_")[end], tail=3)
@@ -126,29 +116,29 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotRHIStep},
         ylims!(ax6, 0.0, rhi_height_max)
 
         dbz_plot = contourf!(ax1, r[:], z[:], dbz[:,:], levels = dbz_levels,
-            colormap = colorschemes[:chaseSpectral])
+            colormap = cmap(dbz_colormap))
         vel_plot = contourf!(ax2, r[:], z[:], vel[:,:], levels = vel_levels,
-            colormap = vel_colormap)
+            colormap = cmap(vel_colormap))
         zdr_plot = contourf!(ax3, r[:], z[:], zdr[:,:], levels = zdr_levels,
-            colormap = zdr_colormap)
+            colormap = cmap(zdr_colormap))
         rhohv_plot = contourf!(ax4, r[:], z[:], rhohv[:,:], levels = rhohv_levels,
-            colormap = Reverse(colorschemes[:romaRhoHV]))
+            colormap = Reverse(cmap(rhohv_colormap)))
         kdp_plot = contourf!(ax5, r[:], z[:], kdp[:,:], levels = kdp_levels,
-            colormap = kdp_colormap)
+            colormap = cmap(kdp_colormap))
         phidp_plot = contourf!(ax6, r[:], z[:], phidp[:,:], levels = phidp_levels,
-            colormap = phidp_colormap)
+            colormap = cmap(phidp_colormap))
 
         colsize!(fig.layout, 1, Aspect(1, 6.0))
-        Colorbar(fig[1,2], dbz_plot, ticks = 0:10:60, label = "dBZ")
-        Colorbar(fig[2,2], vel_plot, ticks = -32:8:32, label = "m/s")
-        Colorbar(fig[3,2], zdr_plot, ticks = -0.5:0.5:3.5, label = "dB")
-        Colorbar(fig[4,2], rhohv_plot, ticks = 0.8:0.05:1.0)
-        Colorbar(fig[5,2], kdp_plot, ticks = -1:1:4, label = "Deg/km")
-        Colorbar(fig[6,2], phidp_plot, ticks = 0:45:360, label = "Deg")
+        Colorbar(fig[1,2], dbz_plot, ticks = dbz_ticks, label = "dBZ")
+        Colorbar(fig[2,2], vel_plot, ticks = vel_ticks, label = "m/s")
+        Colorbar(fig[3,2], zdr_plot, ticks = zdr_ticks, label = "dB")
+        Colorbar(fig[4,2], rhohv_plot, ticks = rhohv_ticks)
+        Colorbar(fig[5,2], kdp_plot, ticks = kdp_ticks, label = "Deg/km")
+        Colorbar(fig[6,2], phidp_plot, ticks = phidp_ticks, label = "Deg")
         resize_to_layout!(fig)
         trim!(fig.layout)
 
-        outfile = joinpath(output_dir, "$(file_prefix)_RHI_$(date)_$(start_str)-$(stop_str)_$(angle)_deg.png")
+        outfile = joinpath(out_dir, "$(file_prefix)_RHI_$(date)_$(start_str)-$(stop_str)_$(angle)_deg.png")
         save(outfile, fig)
     end
 end
