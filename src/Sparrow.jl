@@ -91,8 +91,11 @@ function main(parsed_args)
             using CairoMakie, GeoMakie, ColorSchemes, Images
         end
         msg_info("Plot extension loaded")
-    catch
-        msg_debug("Plot extension packages not available, plot steps will be skipped")
+    catch e
+        # Surface the real reason so a misconfigured environment (missing
+        # weakdeps, precompile/system-library failure) is diagnosable instead
+        # of silently disabling all plot steps on the workers.
+        msg_warning("Plot extension packages failed to load; plot steps will not be available. Reason: $e")
     end
 
     # Setup distributed workers
