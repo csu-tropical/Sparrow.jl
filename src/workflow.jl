@@ -792,6 +792,9 @@ function process_workflow(workflow::SparrowWorkflow)
     force_reprocess = workflow["force_reprocess"]
     reverse_order = workflow["reverse"]
     base_archive_dir = workflow["base_archive_dir"]
+    # When false (default), any volume that errors aborts the whole batch. Set
+    # `skip_failed_volumes = true` in the workflow to log and continue instead.
+    skip_failed_volumes = get_param(workflow, "skip_failed_volumes", false)
 
     # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
     if datetime == "now"
@@ -806,22 +809,35 @@ function process_workflow(workflow::SparrowWorkflow)
     # Get data source for checking data availability
     source = get_data_source(workflow)
 
-    # Helper to process all span_seconds chunks within a single day
-    function process_day_chunks(day_dt::DateTime, processed_files, archived_files;
+    # Count of volumes skipped due to errors (only when skip_failed_volumes)
+    skipped = 0
+
+    # Helper to process all span_seconds chunks within a single day. Each volume's
+    # markers are written as soon as it finishes archiving, so a crash partway
+    # through leaves completed volumes marked and skippable on restart.
+    function process_day_chunks(day_dt::DateTime;
                                 hour_offset::Int=0, num_seconds::Int=86400)
         timerange = chunk_offsets(span_seconds, num_seconds; reverse=reverse_order)
         for t in timerange
             start_time = day_dt + Dates.Hour(hour_offset) + Dates.Second(t)
             stop_time = start_time + Dates.Second(span_seconds)
             msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
-            processed, archived = process_volume(workflow, start_time, stop_time)
-            append!(processed_files, processed)
-            append!(archived_files, archived)
+            try
+                processed, archived = process_volume(workflow, start_time, stop_time)
+                mark_processed(workflow, processed, base_archive_dir)
+                mark_processed(workflow, archived, base_archive_dir)
+            catch e
+                skip_failed_volumes || rethrow()
+                skipped += 1
+                msg_warning("Skipping volume $(Dates.format(start_time, "YYYYmmdd_HHMMSS")): " *
+                            safe_exception_string(e))
+                flush(stdout)
+            end
         end
     end
 
     # Helper to iterate over a range of days, skipping those without data
-    function process_day_range(first_day::DateTime, dayrange, processed_files, archived_files)
+    function process_day_range(first_day::DateTime, dayrange)
         ordered = reverse_order ? Base.reverse(dayrange) : dayrange
         for d in ordered
             day_dt = first_day + Dates.Day(d)
@@ -830,19 +846,17 @@ function process_workflow(workflow::SparrowWorkflow)
                 flush(stdout)
                 continue
             end
-            process_day_chunks(day_dt, processed_files, archived_files)
+            process_day_chunks(day_dt)
         end
     end
 
-    processed_files = []
-    archived_files = []
     if length(datetime) == 4
         # Process a whole year (YYYY)
         base_datetime = DateTime(parse(Int64, year))
         num_days = Dates.value(DateTime(parse(Int64, year) + 1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
         msg_info("Processing year $year ($num_days days)...")
         flush(stdout)
-        process_day_range(base_datetime, 0:(num_days - 1), processed_files, archived_files)
+        process_day_range(base_datetime, 0:(num_days - 1))
     elseif length(datetime) == 6
         # Process a whole month (YYYYmm)
         month = datetime[5:6]
@@ -851,7 +865,7 @@ function process_workflow(workflow::SparrowWorkflow)
         num_days = Dates.value(next_month - base_datetime) ÷ (1000 * 60 * 60 * 24)
         msg_info("Processing month $year-$month ($num_days days)...")
         flush(stdout)
-        process_day_range(base_datetime, 0:(num_days - 1), processed_files, archived_files)
+        process_day_range(base_datetime, 0:(num_days - 1))
     elseif length(datetime) == 8
         # Process one day (YYYYmmdd)
         month = datetime[5:6]
@@ -864,7 +878,7 @@ function process_workflow(workflow::SparrowWorkflow)
             flush(stdout)
             return "not processed due to missing data"
         end
-        process_day_chunks(base_datetime, processed_files, archived_files)
+        process_day_chunks(base_datetime)
     elseif length(datetime) == 11
         # Process one hour (YYYYmmdd_HH)
         month = datetime[5:6]
@@ -878,7 +892,7 @@ function process_workflow(workflow::SparrowWorkflow)
             return "not processed due to missing data"
         end
         flush(stdout)
-        process_day_chunks(base_datetime, processed_files, archived_files;
+        process_day_chunks(base_datetime;
                           hour_offset=parse(Int64, hr), num_seconds=3600)
     elseif length(datetime) == 15
         # Process a specific time window with second precision (YYYYmmdd_HHMMSS)
@@ -891,7 +905,9 @@ function process_workflow(workflow::SparrowWorkflow)
                               parse(Int64, hr), parse(Int64, mn), parse(Int64, sc))
         stop_time = start_time + Dates.Second(span_seconds)
         msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
-        processed_files, archived_files = process_volume(workflow, start_time, stop_time)
+        processed, archived = process_volume(workflow, start_time, stop_time)
+        mark_processed(workflow, processed, base_archive_dir)
+        mark_processed(workflow, archived, base_archive_dir)
     else
         # Process a specific time window with minute precision (YYYYmmdd_HHMM or longer)
         month = datetime[5:6]
@@ -901,21 +917,16 @@ function process_workflow(workflow::SparrowWorkflow)
         start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
         stop_time = start_time + Dates.Second(span_seconds)
         msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
-        processed_files, archived_files = process_volume(workflow, start_time, stop_time)
-    end
-
-    # Mark files as processed by touching a hidden file in the archive directory
-    mkpath(base_archive_dir * "/.sparrow/")
-    for file in processed_files
-        hidden_file = "$(base_archive_dir)/.sparrow/$(typeof(workflow))_$(basename(file))"
-        touch(hidden_file)
-    end
-    for file in archived_files
-        hidden_file = "$(base_archive_dir)/.sparrow/$(typeof(workflow))_$(basename(file))"
-        touch(hidden_file)
+        processed, archived = process_volume(workflow, start_time, stop_time)
+        mark_processed(workflow, processed, base_archive_dir)
+        mark_processed(workflow, archived, base_archive_dir)
     end
 
     flush(stdout)
+    if skipped > 0
+        msg_warning("Completed batch with $(skipped) skipped volume(s) due to errors.")
+        return "processed with $(skipped) skipped volume(s)"
+    end
     return "processed successfully"
 end
 
@@ -1034,12 +1045,25 @@ Check if a file has already been processed (exists in archive).
 function check_processed(workflow::SparrowWorkflow, file::String, archive_dir::String)
 
     # Make sure the hidden processed directory exists
-    processed_dir = joinpath(archive_dir,".sparrow")
-    mkpath(processed_dir)
-    processed_file = "$(processed_dir)/$(typeof(workflow))_$(basename(file))"
-    if isfile(processed_file)
-        return true
-    else
-        return false
+    mkpath(joinpath(archive_dir, ".sparrow"))
+    return isfile(marker_path(workflow, archive_dir, file))
+end
+
+# Path of the hidden processed-marker for `file`. Shared by check_processed
+# (reader) and mark_processed (writer) so the two can never drift apart.
+marker_path(workflow::SparrowWorkflow, archive_dir::String, file::String) =
+    joinpath(archive_dir, ".sparrow", "$(typeof(workflow))_$(basename(file))")
+
+"""
+    mark_processed(workflow::SparrowWorkflow, files, archive_dir::String)
+
+Touch a processed-marker file for each entry in `files` under the hidden
+`.sparrow` directory in `archive_dir`. Empty `files` is a no-op (apart from
+ensuring the marker directory exists). Idempotent. Mirrors [`check_processed`].
+"""
+function mark_processed(workflow::SparrowWorkflow, files, archive_dir::String)
+    mkpath(joinpath(archive_dir, ".sparrow"))
+    for file in files
+        touch(marker_path(workflow, archive_dir, file))
     end
 end
