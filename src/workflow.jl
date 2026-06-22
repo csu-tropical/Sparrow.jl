@@ -979,8 +979,8 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     # Clean up and move to archive
     processed_files = archive_workflow(workflow, temp_dir, date)
 
-    # Remove the temporary directories
-    rm(temp_dir, recursive=true)
+    # Remove the temporary directories (robust to ENOTEMPTY on networked FS)
+    remove_working_dir(temp_dir)
 
     msg_info("Completed $(typeof(workflow)) workflow from $(start_time) to $(stop_time) with $(length(input_files)) input files and $(length(processed_files)) processed, archived files.")
     flush(stdout)

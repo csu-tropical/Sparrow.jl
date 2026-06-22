@@ -55,6 +55,12 @@ function link_base_data(date, workflow, raw_working_dir;
 
     base_archive_dir = workflow["base_archive_dir"]
     force_reprocess = workflow["force_reprocess"]
+    # When set, a missing .sparrow marker is reconciled against existing archived
+    # products (see `archived_output_exists`): if every archive step already has
+    # output for this scan, write the marker and skip. Default false, consistent
+    # with the conservative abort mode — recovers pre-marker broken runs without
+    # reprocessing already-finished volumes.
+    reconcile = get_param(workflow, "reconcile_markers", false)
     source = get_data_source(workflow)
 
     if is_remote(source)
@@ -71,25 +77,35 @@ function link_base_data(date, workflow, raw_working_dir;
         end
         for filename in remote_files
             fname = basename(filename)
-            if force_reprocess || !check_processed(workflow, fname, base_archive_dir)
-                cached_file = joinpath(cache_dir, fname)
-                if !isfile(cached_file)
-                    try
-                        fetch_file(source, fname, cache_dir, date)
-                    catch e
-                        msg_warning("Failed to fetch $fname: $e")
+            if !force_reprocess
+                if check_processed(workflow, fname, base_archive_dir)
+                    msg_debug("File $fname already processed by $(typeof(workflow)), skipping...")
+                    continue
+                elseif reconcile
+                    # File not downloaded yet; key reconcile off the filename time.
+                    scan_start = _parse_filename_time(fname)
+                    if scan_start !== nothing && archived_output_exists(workflow, scan_start, date)
+                        mark_processed(workflow, [fname], base_archive_dir)
+                        msg_info("Reconciled $fname: products already archived, marking processed and skipping")
                         continue
                     end
-                else
-                    msg_debug("File $fname already cached in $cache_dir")
                 end
-                # Symlink cached file into working directory
-                link = joinpath(raw_working_dir, fname)
-                if !islink(link) && !isfile(link)
-                    symlink(cached_file, link)
+            end
+            cached_file = joinpath(cache_dir, fname)
+            if !isfile(cached_file)
+                try
+                    fetch_file(source, fname, cache_dir, date)
+                catch e
+                    msg_warning("Failed to fetch $fname: $(safe_exception_string(e))")
+                    continue
                 end
             else
-                msg_debug("File $fname already processed by $(typeof(workflow)), skipping...")
+                msg_debug("File $fname already cached in $cache_dir")
+            end
+            # Symlink cached file into working directory
+            link = joinpath(raw_working_dir, fname)
+            if !islink(link) && !isfile(link)
+                symlink(cached_file, link)
             end
         end
     else
@@ -107,15 +123,52 @@ function link_base_data(date, workflow, raw_working_dir;
             data_files = _filter_files_by_time(data_files, start_time, stop_time)
         end
         for file in data_files
-            if force_reprocess || !check_processed(workflow, file, base_archive_dir)
-                target = file
-                link = joinpath(raw_working_dir, basename(file))
-                symlink(target, link)
-            else
-                msg_debug("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
+            if !force_reprocess
+                if check_processed(workflow, file, base_archive_dir)
+                    msg_debug("File $(basename(file)) already processed by $(typeof(workflow)), skipping...")
+                    continue
+                elseif reconcile
+                    scan_start = get_scan_start(file)
+                    if scan_start > DateTime(1970) && archived_output_exists(workflow, scan_start, date)
+                        mark_processed(workflow, [file], base_archive_dir)
+                        msg_info("Reconciled $(basename(file)): products already archived, marking processed and skipping")
+                        continue
+                    end
+                end
             end
+            link = joinpath(raw_working_dir, basename(file))
+            symlink(file, link)
         end
     end
+end
+
+"""
+    archived_output_exists(workflow, scan_start::DateTime, date) -> Bool
+
+True if **any** archive step already has an output product for the scan at
+`scan_start` on `date`. Gridded products embed the scan time as
+`..._<YYYYmmdd_HHMMSS>...` (see `grid_output_name`), so a file in an archive
+step's dir whose name contains that timestamp marks that scan as archived.
+
+"Any" rather than "all" because a single scan only produces a subset of the
+configured archive products (a PPI scan yields ppi/composite/volume/latlon but
+no rhi; an RHI scan yields only rhi), so requiring every archive step would
+almost never match. Archiving is per-chunk and atomic-ish — all of a completed
+chunk's products move together at the end of `process_volume` — so the presence
+of any product for a scan reliably means that scan's chunk finished. (The only
+gap is a crash *during* the archive move itself, a narrow window; force-reprocess
+a suspect date if needed.) Returns false if no archive step has matching output.
+"""
+function archived_output_exists(workflow::SparrowWorkflow, scan_start::DateTime, date)
+    archive_dir = workflow["base_archive_dir"]
+    stamp = Dates.format(scan_start, "YYYYmmdd_HHMMSS")
+    for (step_name, step_type, input_name, archive) in workflow["steps"]
+        archive || continue
+        step_dir = joinpath(archive_dir, step_name, date)
+        isdir(step_dir) || continue
+        any(f -> occursin(stamp, f), readdir(step_dir)) && return true
+    end
+    return false
 end
 
 """
@@ -179,16 +232,49 @@ function archive_files(files, archive_dir, force)
         msg_debug("Archiving $file -> $newfile")
         if force
             mv(file, newfile, force=true)
+        elseif isfile(newfile)
+            # Product already archived and we're not forcing: skip this one and
+            # leave the existing copy in place (the un-moved temp file is removed
+            # with the working dir). Continue archiving the rest rather than
+            # aborting the whole step. Use '--force_reprocess' to overwrite, or
+            # `reconcile_markers = true` to skip already-finished volumes entirely.
+            msg_warning("Archived product already exists, skipping: $newfile " *
+                        "(use '--force_reprocess' to overwrite)")
         else
             try
                 mv(file, newfile)
             catch e
-                msg_warning("Error archiving $file, may need '--force_reprocess' flag: $e")
-                return false
+                msg_warning("Error archiving $file: $(safe_exception_string(e))")
             end
         end
     end
     return true
+end
+
+"""
+    remove_working_dir(temp_dir)
+
+Remove a disposable working directory. On networked/parallel filesystems
+(Lustre/NFS) a recursive delete can transiently fail with `ENOTEMPTY` while
+async unlinks settle, so retry a few times. A persistent failure is logged but
+never aborts the run — the directory is scratch.
+"""
+function remove_working_dir(temp_dir)
+    for attempt in 1:3
+        try
+            rm(temp_dir; recursive=true, force=true)
+            return
+        catch e
+            if attempt < 3
+                msg_debug("Cleanup of $temp_dir failed (attempt $attempt), retrying: " *
+                          safe_exception_string(e))
+                sleep(0.5)
+            else
+                msg_warning("Could not fully remove working dir $temp_dir: " *
+                            safe_exception_string(e))
+            end
+        end
+    end
 end
 
 function find_SeaPol_sigmet_data(date, time)
