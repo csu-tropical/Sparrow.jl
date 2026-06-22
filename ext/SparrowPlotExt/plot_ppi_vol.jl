@@ -88,16 +88,17 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
         xlims!(ax[f], lon[1, y_center], lon[xdim, y_center])
         ylims!(ax[f], lat[x_center, 1], lat[x_center, ydim])
 
-        contourf!(ax[f], lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
+        safe_contourf!(ax[f], lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
             colormap = blanking_cbar, extendlow = blank_color)
-        composite = contourf!(ax[f], lon[:,y_center], lat[x_center,:], dbz[:,:], levels = dbz_levels,
+        composite = safe_contourf!(ax[f], lon[:,y_center], lat[x_center,:], dbz[:,:], levels = dbz_levels,
             colormap = cmap(dbz_colormap))
         if marker_lon !== nothing && marker_lat !== nothing
             scatter!(ax[f], marker_lon, marker_lat, marker=:diamond, markersize = 5, color = :black)
         end
         colsize!(fig.layout, 1, Aspect(1, 1.0))
         if col == num_columns || f == length(files)
-            Colorbar(fig[row, num_columns + 1], composite, ticks = dbz_ticks, label = "dBZ")
+            data_colorbar!(fig[row, num_columns + 1], composite; colormap = cmap(dbz_colormap),
+                levels = dbz_levels, ticks = dbz_ticks, label = "dBZ")
         end
     end
 

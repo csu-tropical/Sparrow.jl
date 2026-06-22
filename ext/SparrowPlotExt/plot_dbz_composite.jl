@@ -80,12 +80,13 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotDBZCompositeStep},
                 fontsize = :12, align = (:center, :baseline))
         end
 
-        contourf!(ax, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
+        safe_contourf!(ax, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
             colormap = blanking_cbar, extendlow = blank_color)
-        composite = contourf!(ax, lon[:,y_center], lat[x_center,:], dbzmax[:,:], levels = dbz_levels,
+        composite = safe_contourf!(ax, lon[:,y_center], lat[x_center,:], dbzmax[:,:], levels = dbz_levels,
             colormap = cmap(dbz_colormap))
         colsize!(fig.layout, 1, Aspect(1, 1.0))
-        Colorbar(fig[1,2], composite, ticks = dbz_ticks, label = "dBZ")
+        data_colorbar!(fig[1,2], composite; colormap = cmap(dbz_colormap),
+            levels = dbz_levels, ticks = dbz_ticks, label = "dBZ")
         resize_to_layout!(fig)
 
         outfile = joinpath(out_dir, "$(file_prefix)_composite_$(date)_$(start_str)-$(stop_str).png")

@@ -55,3 +55,33 @@ function scanned_blanking(g, scanned_field::AbstractString)
                   "absent from the gridded file.")
     return ifelse.(g.fields[scanned_field] .> Float32(g.io.fill_value), NaN, 0.0)
 end
+
+"""
+    safe_contourf!(ax, x, y, z; kwargs...) -> plot or nothing
+
+`contourf!` guarded against all-missing data. Makie's `contourf` throws deep in
+`_group_polys` (a `KeyError`) when `z` has no finite values to contour — e.g. an
+empty PPI sweep with no detections — which would otherwise abort a whole batch
+run on a single dataless grid. Returns the contourf plot when there is something
+to draw, or `nothing` when `z` is entirely non-finite (the panel is left empty).
+"""
+function safe_contourf!(ax, x, y, z; kwargs...)
+    any(isfinite, z) || return nothing
+    return contourf!(ax, x, y, z; kwargs...)
+end
+
+"""
+    data_colorbar!(pos, plt; colormap, levels, ticks, label="") -> Colorbar
+
+Place a Colorbar at layout position `pos` for a data panel. When `plt` is a real
+plot (data was drawn) the colorbar derives from it. When `plt` is `nothing` (an
+empty panel skipped by [`safe_contourf!`](@ref)) the colorbar is reconstructed
+from `colormap`/`levels` so the figure layout and color scale stay consistent.
+Pass the same `colormap` value handed to `contourf!`.
+"""
+function data_colorbar!(pos, plt; colormap, levels, ticks, label = "")
+    plt === nothing || return Colorbar(pos, plt; ticks = ticks, label = label)
+    lvls = collect(levels)
+    return Colorbar(pos; colormap = colormap,
+        limits = (first(lvls), last(lvls)), ticks = ticks, label = label)
+end

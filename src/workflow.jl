@@ -657,7 +657,7 @@ function assign_workers(workflow::SparrowWorkflow)
         try
             wait(get_from(workers()[1], :(process_workflow($(workflow)))))
         catch e
-            msg_warning("Error processing workflow: $e")
+            msg_warning("Error processing workflow: $(safe_exception_string(e))")
             flush(stdout)
             return false
         end

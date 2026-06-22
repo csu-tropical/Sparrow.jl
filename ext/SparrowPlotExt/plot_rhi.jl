@@ -115,26 +115,26 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotRHIStep},
         xlims!(ax6, 0.0, rhi_range_max)
         ylims!(ax6, 0.0, rhi_height_max)
 
-        dbz_plot = contourf!(ax1, r[:], z[:], dbz[:,:], levels = dbz_levels,
+        dbz_plot = safe_contourf!(ax1, r[:], z[:], dbz[:,:], levels = dbz_levels,
             colormap = cmap(dbz_colormap))
-        vel_plot = contourf!(ax2, r[:], z[:], vel[:,:], levels = vel_levels,
+        vel_plot = safe_contourf!(ax2, r[:], z[:], vel[:,:], levels = vel_levels,
             colormap = cmap(vel_colormap))
-        zdr_plot = contourf!(ax3, r[:], z[:], zdr[:,:], levels = zdr_levels,
+        zdr_plot = safe_contourf!(ax3, r[:], z[:], zdr[:,:], levels = zdr_levels,
             colormap = cmap(zdr_colormap))
-        rhohv_plot = contourf!(ax4, r[:], z[:], rhohv[:,:], levels = rhohv_levels,
+        rhohv_plot = safe_contourf!(ax4, r[:], z[:], rhohv[:,:], levels = rhohv_levels,
             colormap = Reverse(cmap(rhohv_colormap)))
-        kdp_plot = contourf!(ax5, r[:], z[:], kdp[:,:], levels = kdp_levels,
+        kdp_plot = safe_contourf!(ax5, r[:], z[:], kdp[:,:], levels = kdp_levels,
             colormap = cmap(kdp_colormap))
-        phidp_plot = contourf!(ax6, r[:], z[:], phidp[:,:], levels = phidp_levels,
+        phidp_plot = safe_contourf!(ax6, r[:], z[:], phidp[:,:], levels = phidp_levels,
             colormap = cmap(phidp_colormap))
 
         colsize!(fig.layout, 1, Aspect(1, 6.0))
-        Colorbar(fig[1,2], dbz_plot, ticks = dbz_ticks, label = "dBZ")
-        Colorbar(fig[2,2], vel_plot, ticks = vel_ticks, label = "m/s")
-        Colorbar(fig[3,2], zdr_plot, ticks = zdr_ticks, label = "dB")
-        Colorbar(fig[4,2], rhohv_plot, ticks = rhohv_ticks)
-        Colorbar(fig[5,2], kdp_plot, ticks = kdp_ticks, label = "Deg/km")
-        Colorbar(fig[6,2], phidp_plot, ticks = phidp_ticks, label = "Deg")
+        data_colorbar!(fig[1,2], dbz_plot; colormap = cmap(dbz_colormap), levels = dbz_levels, ticks = dbz_ticks, label = "dBZ")
+        data_colorbar!(fig[2,2], vel_plot; colormap = cmap(vel_colormap), levels = vel_levels, ticks = vel_ticks, label = "m/s")
+        data_colorbar!(fig[3,2], zdr_plot; colormap = cmap(zdr_colormap), levels = zdr_levels, ticks = zdr_ticks, label = "dB")
+        data_colorbar!(fig[4,2], rhohv_plot; colormap = Reverse(cmap(rhohv_colormap)), levels = rhohv_levels, ticks = rhohv_ticks)
+        data_colorbar!(fig[5,2], kdp_plot; colormap = cmap(kdp_colormap), levels = kdp_levels, ticks = kdp_ticks, label = "Deg/km")
+        data_colorbar!(fig[6,2], phidp_plot; colormap = cmap(phidp_colormap), levels = phidp_levels, ticks = phidp_ticks, label = "Deg")
         resize_to_layout!(fig)
         trim!(fig.layout)
 

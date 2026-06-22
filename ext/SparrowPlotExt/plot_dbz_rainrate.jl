@@ -76,12 +76,13 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotDBZRainrateStep},
         xlims!(ax1, lon[1, y_center], lon[xdim, y_center])
         ylims!(ax1, lat[x_center, 1], lat[x_center, ydim])
 
-        contourf!(ax1, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
+        safe_contourf!(ax1, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
             colormap = blanking_cbar, extendlow = blank_color)
-        composite = contourf!(ax1, lon[:,y_center], lat[x_center,:], dbz[:,:], levels = dbz_levels,
+        composite = safe_contourf!(ax1, lon[:,y_center], lat[x_center,:], dbz[:,:], levels = dbz_levels,
             colormap = cmap(dbz_colormap))
         colsize!(fig.layout, 1, Aspect(1, 1.0))
-        Colorbar(fig[1,2], composite, ticks = dbz_ticks, label = "dBZ")
+        data_colorbar!(fig[1,2], composite; colormap = cmap(dbz_colormap),
+            levels = dbz_levels, ticks = dbz_ticks, label = "dBZ")
 
         ax2 = CairoMakie.Axis(fig[1,3],
             width=plot_width,
@@ -91,15 +92,16 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotDBZRainrateStep},
         xlims!(ax2, lon[1, y_center], lon[xdim, y_center])
         ylims!(ax2, lat[x_center, 1], lat[x_center, ydim])
 
-        contourf!(ax2, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
+        safe_contourf!(ax2, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
             colormap = blanking_cbar, extendlow = blank_color)
-        rainrate = contourf!(ax2, lon[:,y_center], lat[x_center,:], rr[:,:], levels = rainrate_levels,
+        rainrate = safe_contourf!(ax2, lon[:,y_center], lat[x_center,:], rr[:,:], levels = rainrate_levels,
             colormap = cmap(rainrate_colormap))
         if marker_lon !== nothing && marker_lat !== nothing
             scatter!(ax2, marker_lon, marker_lat, marker=:diamond, markersize = 5, color = :black)
         end
         colsize!(fig.layout, 1, Aspect(1, 1.0))
-        Colorbar(fig[1,4], rainrate, ticks = rainrate_ticks, label = "Rain rate mm/hr")
+        data_colorbar!(fig[1,4], rainrate; colormap = cmap(rainrate_colormap),
+            levels = rainrate_levels, ticks = rainrate_ticks, label = "Rain rate mm/hr")
 
         resize_to_layout!(fig)
         outfile = joinpath(out_dir, "$(file_prefix)_PPI_$(date)_$(start_str)-$(stop_str)_$(elevation)_deg.png")

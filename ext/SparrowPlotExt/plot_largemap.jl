@@ -70,9 +70,9 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotLargemapStep},
         lines!(ax, GeoMakie.coastlines(), color = coastline_color)
 
         blanking_cbar = [blank_color]
-        contourf!(ax, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
+        safe_contourf!(ax, lon[:,y_center], lat[x_center,:], blanking[:,:], levels = range(-5, 5, step=10),
             colormap = blanking_cbar, extendlow= blank_color)
-        composite = contourf!(ax, lon[:,y_center], lat[x_center,:], dbzmax[:,:], levels = dbz_levels,
+        composite = safe_contourf!(ax, lon[:,y_center], lat[x_center,:], dbzmax[:,:], levels = dbz_levels,
             colormap = cmap(dbz_colormap))
         Textbox(fig[1, 1], placeholder = "$(radar_name) dBZ $timestr",
             valign = :top, halign = :left, boxcolor= :white, fontsize = :12)
@@ -80,7 +80,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotLargemapStep},
         ax.yticks = [geo_ylims[1], geo_ylims[2]]
         hidedecorations!(ax, grid = false)
         colsize!(fig.layout, 1, Aspect(1, 1.0))
-        Colorbar(fig[1,2], composite, ticks = dbz_ticks, label = "dBZ")
+        data_colorbar!(fig[1,2], composite; colormap = cmap(dbz_colormap),
+            levels = dbz_levels, ticks = dbz_ticks, label = "dBZ")
         resize_to_layout!(fig)
 
         outfile = joinpath(out_dir, "$(file_prefix)_largemap_$(date)_$(start_str)-$(stop_str).png")

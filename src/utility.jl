@@ -106,3 +106,27 @@ function get_scan_name(file)
         return ""
     end
 end
+
+"""
+    safe_exception_string(e) -> String
+
+Stringify an exception for logging without letting the formatting itself throw.
+Some errors raised on workers embed objects (e.g. Makie/ComputePipeline
+internals) whose own `show` method throws, so naively interpolating `\$e` would
+crash the error-handling path and mask the original failure. Falls back to the
+captured exception's type (and worker pid) when the full message is unprintable.
+"""
+function safe_exception_string(e)
+    try
+        return sprint(showerror, e)
+    catch
+    end
+    try
+        if e isa RemoteException
+            cap = e.captured.ex
+            return "remote $(typeof(cap)) on worker $(e.pid) (full message unprintable)"
+        end
+    catch
+    end
+    return string(typeof(e))
+end
