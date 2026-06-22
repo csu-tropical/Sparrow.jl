@@ -59,15 +59,28 @@ end
 """
     safe_contourf!(ax, x, y, z; kwargs...) -> plot or nothing
 
-`contourf!` guarded against all-missing data. Makie's `contourf` throws deep in
-`_group_polys` (a `KeyError`) when `z` has no finite values to contour — e.g. an
-empty PPI sweep with no detections — which would otherwise abort a whole batch
-run on a single dataless grid. Returns the contourf plot when there is something
-to draw, or `nothing` when `z` is entirely non-finite (the panel is left empty).
+`contourf!` guarded against data that Makie can't contour. Makie throws deep in
+`_group_polys` (a `KeyError`, surfaced as a `ComputePipeline.ResolveException`)
+not only when `z` is entirely non-finite (an empty PPI sweep) but also on
+otherwise-degenerate fields — a constant field, a handful of isolated finite
+cells, or values that all fall outside the requested `levels`. Either case would
+abort a whole batch run on a single grid.
+
+Returns the contourf plot when the panel draws, or `nothing` when there is
+nothing to draw or the contour fails (the panel is left empty and its colorbar
+is rebuilt from `colormap`/`levels` by [`data_colorbar!`](@ref)). The cheap
+`any(isfinite, z)` pre-check skips the common empty case without constructing a
+plot; the try/catch backstops the rarer degenerate-geometry failures.
 """
 function safe_contourf!(ax, x, y, z; kwargs...)
     any(isfinite, z) || return nothing
-    return contourf!(ax, x, y, z; kwargs...)
+    try
+        return contourf!(ax, x, y, z; kwargs...)
+    catch e
+        msg_warning("contourf failed ($(typeof(e))); leaving this panel empty " *
+                    "(degenerate or un-contourable data)")
+        return nothing
+    end
 end
 
 """
