@@ -314,7 +314,7 @@ function message(msg::String, level::Int=MSG_INFO; flush_output::Bool=true)
         end
 
         timestamp = Dates.format(now(UTC), "yyyy-mm-dd HH:MM:SS")
-        println("[$timestamp] $prefix: $msg")
+        println("[$timestamp] $prefix : $msg")
 
         if flush_output
             flush(stdout)
