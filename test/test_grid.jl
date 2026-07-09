@@ -114,6 +114,47 @@ end
     @test Sparrow.grid_output_name("rhi", t, 12.5) != Sparrow.grid_output_name("rhi", t2, 12.5)
 end
 
+@testset "resolve_index_time" begin
+    # Default preserves the per-scan time when the parameter is absent
+    @test Sparrow.resolve_index_time(GridConfigTestWorkflow()) == :scan_start
+
+    # Accepts strings and Symbols, matched case-insensitively
+    for mode in Sparrow.INDEX_TIME_OPTIONS
+        @test Sparrow.resolve_index_time(GridConfigTestWorkflow(index_time = mode)) == mode
+        @test Sparrow.resolve_index_time(GridConfigTestWorkflow(index_time = String(mode))) == mode
+        @test Sparrow.resolve_index_time(
+            GridConfigTestWorkflow(index_time = uppercase(String(mode)))) == mode
+    end
+
+    # An unknown value names the valid options
+    err = try
+        Sparrow.resolve_index_time(GridConfigTestWorkflow(index_time = "scan_end"))
+        nothing
+    catch e
+        e
+    end
+    @test err isa ErrorException
+    @test occursin("scan_start", err.msg)
+    @test occursin("stop_time", err.msg)
+
+    # A wrong-typed value is rejected rather than stringified
+    @test_throws ErrorException Sparrow.resolve_index_time(GridConfigTestWorkflow(index_time = 3))
+
+    # Validation happens at setup, before any data is read
+    @test_throws ErrorException Sparrow.setup_workflow_params(
+        GridConfigTestWorkflow(index_time = "scan_end"), _test_parsed_args())
+end
+
+@testset "grid_index_time" begin
+    scan_start = DateTime(2022, 9, 17, 18, 40, 23)
+    start_time = DateTime(2022, 9, 17, 18, 40, 0)
+    stop_time = DateTime(2022, 9, 17, 18, 50, 0)
+
+    @test Sparrow.grid_index_time(:scan_start, scan_start, start_time, stop_time) == scan_start
+    @test Sparrow.grid_index_time(:start_time, scan_start, start_time, stop_time) == start_time
+    @test Sparrow.grid_index_time(:stop_time, scan_start, start_time, stop_time) == stop_time
+end
+
 @testset "warn_legacy_grid_params" begin
     wf = GridConfigTestWorkflow(beam_inflation = 0.0175, vol_xmin = -1000.0)
     _, output = _capture_stdout() do

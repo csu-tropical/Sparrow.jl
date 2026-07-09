@@ -212,6 +212,44 @@ function resolve_span_seconds(workflow::SparrowWorkflow)
 end
 
 """
+Valid values for the `index_time` workflow parameter.
+"""
+const INDEX_TIME_OPTIONS = (:scan_start, :start_time, :stop_time)
+
+"""
+    resolve_index_time(workflow::SparrowWorkflow) → Symbol
+
+Which `DateTime` the gridding steps write as the time coordinate of each gridded
+product. One of:
+
+- `:scan_start` (default): the start time of the scan itself, read from the input
+  file. Correct for datasets with irregular scan timing, where an even increment
+  is meaningless.
+- `:start_time`: the start of the analysis increment (the processing window
+  defined by `span_seconds`). Products then fall on a regular time increment.
+- `:stop_time`: the end of the analysis increment, i.e. `start_time + span_seconds`.
+
+The parameter may be given as a string or a `Symbol` and is matched
+case-insensitively (`"start_time"`, `:start_time`, `"Start_Time"`). Anything else
+throws.
+
+This affects only the time coordinate written into the product. The output
+*filename* always carries the per-scan time, so two scans landing in the same
+analysis increment never overwrite each other.
+"""
+function resolve_index_time(workflow::SparrowWorkflow)
+    value = get_param(workflow, "index_time", :scan_start)
+    value isa Union{AbstractString,Symbol} || error(
+        "Invalid index_time $(repr(value)) of type $(typeof(value)). " *
+        "Valid options are: $(join(INDEX_TIME_OPTIONS, ", ")).")
+    mode = Symbol(lowercase(String(value)))
+    mode in INDEX_TIME_OPTIONS || error(
+        "Invalid index_time $(repr(value)). " *
+        "Valid options are: $(join(INDEX_TIME_OPTIONS, ", ")).")
+    return mode
+end
+
+"""
     chunk_offsets(span_seconds::Int, num_seconds::Int; reverse::Bool=false) → StepRange
 
 Return the start-second offsets for chunking a `num_seconds`-long window into
@@ -477,6 +515,10 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     if haskey(workflow.params, "daisho_config")
         workflow["daisho_params"] = DaishoParameters(workflow["daisho_config"])
     end
+
+    # Validate on the main process so a typo fails at startup rather than hours
+    # later on a worker part-way through a gridding step.
+    resolve_index_time(workflow)
 
     return workflow
 end

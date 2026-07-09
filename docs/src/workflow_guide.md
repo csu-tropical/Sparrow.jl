@@ -198,6 +198,8 @@ workflow = MyWorkflow(
     # Time handling
     span_seconds = "10M",          # Chunk length: seconds (600) or "20S"/"5M"/"10H"/"1D"
     reverse = false,               # Process in reverse chronological order
+    index_time = "scan_start",     # Time coordinate of gridded output:
+                                   #   "scan_start" (default), "start_time", "stop_time"
     
     # Directories
     base_plot_dir = "/plots",      # Output plots directory
@@ -306,6 +308,29 @@ The legacy `minute_span` parameter is still accepted for backward compatibility.
 On first use, Sparrow converts it to `span_seconds` (multiplying by 60), removes
 the old key from the workflow, and emits a one-time deprecation warning. New
 workflows should use `span_seconds` directly.
+
+### Time Coordinate of Gridded Output
+
+The `index_time` parameter selects which `DateTime` the gridding steps write as
+the time coordinate of each gridded product:
+
+| Value | Time coordinate |
+|-------|-----------------|
+| `"scan_start"` (default) | Start of the scan, read from the input file |
+| `"start_time"` | Start of the analysis increment |
+| `"stop_time"` | End of the analysis increment (`start_time + span_seconds`) |
+
+Use the default `"scan_start"` for datasets with irregular scan timing, where
+snapping products to an even increment is meaningless. Use `"start_time"` or
+`"stop_time"` when downstream consumers expect successive products to be
+separated by exactly one `span_seconds` increment.
+
+The value may be given as a string or a `Symbol`, matched case-insensitively.
+An unrecognized value errors when the workflow is set up, before any data is read.
+
+This affects only the time coordinate inside the product. The output *filename*
+always carries the per-scan time, so two scans landing in the same analysis
+increment still produce two distinct files rather than one overwriting the other.
 
 ## Distributed Processing
 

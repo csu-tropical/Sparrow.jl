@@ -74,23 +74,33 @@ function grid_input_files(input_dir::String, start_time::DateTime, stop_time::Da
     return selected
 end
 
+# Time coordinate written into the gridded product, selected by the workflow's
+# `index_time` parameter (see `resolve_index_time`). The output filename always
+# uses `scan_start` regardless, so scans sharing an analysis increment do not
+# collide.
+grid_index_time(mode::Symbol, scan_start::DateTime, start_time::DateTime, stop_time::DateTime) =
+    mode === :scan_start ? scan_start :
+    mode === :start_time ? start_time : stop_time
+
 @workflow_step GridRHIStep
 function workflow_step(workflow::SparrowWorkflow, ::Type{GridRHIStep}, input_dir::String, output_dir::String; start_time::DateTime, stop_time::DateTime, step_name::String, kwargs...)
 
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             for i in eachindex(volume.sweeps)
                 output_file = joinpath(output_dir,
                     grid_output_name("rhi", scan_start, volume.sweeps[i].fixed_angle))
                 msg_info("Gridding RHI $output_file")
                 flush(stdout)
                 @time Daisho.grid_radar_rhi(single_sweep_volume(volume, i),
-                    output_file, scan_start, daisho_params)
+                    output_file, grid_time, daisho_params)
             end
         end
     end
@@ -102,14 +112,16 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridCompositeStep}, inp
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if !contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             output_file = joinpath(output_dir, grid_output_name("composite", scan_start))
             msg_info("Gridding composite $output_file")
             flush(stdout)
-            @time Daisho.grid_radar_composite(volume, output_file, scan_start,
+            @time Daisho.grid_radar_composite(volume, output_file, grid_time,
                 daisho_params; mean_heading=mean_volume_heading(volume))
         end
     end
@@ -121,14 +133,16 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridVolumeStep}, input_
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if !contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             output_file = joinpath(output_dir, grid_output_name("volume", scan_start))
             msg_info("Gridding volume $output_file")
             flush(stdout)
-            @time Daisho.grid_radar_volume(volume, output_file, scan_start,
+            @time Daisho.grid_radar_volume(volume, output_file, grid_time,
                 daisho_params; heading=mean_volume_heading(volume))
         end
     end
@@ -140,14 +154,16 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridLatlonStep}, input_
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if !contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             output_file = joinpath(output_dir, grid_output_name("latlon", scan_start))
             msg_info("Gridding lat-lon volume $output_file")
             flush(stdout)
-            @time Daisho.grid_radar_latlon_volume(volume, output_file, scan_start,
+            @time Daisho.grid_radar_latlon_volume(volume, output_file, grid_time,
                 daisho_params; heading=mean_volume_heading(volume))
         end
     end
@@ -159,12 +175,14 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridPPIStep}, input_dir
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
     max_ppi_angle = workflow["max_ppi_angle"]
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if !contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
             heading = mean_volume_heading(volume)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             for i in eachindex(volume.sweeps)
                 angle = volume.sweeps[i].fixed_angle
                 if angle <= max_ppi_angle
@@ -172,7 +190,7 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridPPIStep}, input_dir
                         grid_output_name("ppi", scan_start, angle))
                     msg_info("Gridding PPI $output_file")
                     @time Daisho.grid_radar_ppi(single_sweep_volume(volume, i),
-                        output_file, scan_start, daisho_params; heading=heading)
+                        output_file, grid_time, daisho_params; heading=heading)
                 end
             end
         end
@@ -185,11 +203,13 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridQVPStep}, input_dir
     msg_info("Executing Step $(step_name) for $(typeof(workflow)) ...")
     daisho_params = get_daisho_params(workflow)
     warn_legacy_grid_params(workflow)
+    index_mode = resolve_index_time(workflow)
     min_qvp_angle = workflow["min_qvp_angle"]
 
     for (file, scan_start) in grid_input_files(input_dir, start_time, stop_time)
         if !contains(file, "RHI")
             volume = Daisho.read_cfradial(file)
+            grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             for i in eachindex(volume.sweeps)
                 angle = volume.sweeps[i].fixed_angle
                 if angle >= min_qvp_angle
@@ -197,7 +217,7 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridQVPStep}, input_dir
                         grid_output_name("qvp", scan_start, angle))
                     msg_info("Gridding QVP $output_file")
                     @time Daisho.grid_radar_column(single_sweep_volume(volume, i),
-                        output_file, scan_start, daisho_params)
+                        output_file, grid_time, daisho_params)
                 end
             end
         end
