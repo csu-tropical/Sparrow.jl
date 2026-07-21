@@ -110,6 +110,10 @@ end
     include("test_grid.jl")
 end
 
+@testset "Hybrid Scan Step" begin
+    include("test_hybrid.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin

@@ -339,6 +339,65 @@ workflow = MyWorkflow(
 
 ---
 
+## Derived Product Steps
+
+### HybridScanStep
+
+**Module:** `hybrid.jl`
+
+**Purpose:** Collapse a time chunk's gridded PPI tilts into a single near-surface 2D
+product — the "hybrid scan". Starts from the base (lowest) tilt and, wherever that
+tilt has no measurement, looks upward through the higher tilts and takes the first
+one whose beam is still near the surface at that cell.
+
+**Use Cases:**
+- Surface rain-rate and reflectivity products from a volume scan
+- Filling low-tilt beam blockage or near/far-range gaps with the next-best look
+- Any product that wants "the lowest useful measurement" rather than one fixed tilt
+
+**Parameters Required:**
+- `daisho_config` with an enabled `[hybrid_scan]` block. All of the science
+  configuration lives there: which fields to carry, the base tilt (`base_angle`), the
+  upper limit on fill height (`beam_height_maximum`), and whether clear air counts as
+  an answer or the search climbs past it looking for echo (`require_detection`). See
+  the Daisho documentation.
+- `input_directory` must be a preceding PPI grid step. Steps run in declaration order
+  within a chunk, so that step's grids are already on disk; every file in the
+  directory is treated as one tilt of the same volume.
+
+Each tilt's elevation angle comes from the `fixed_angle` variable Daisho writes into
+gridded PPI files. For archives written before that existed, set
+`[hybrid_scan] angle_pattern` to a regex with one capture group matching the angle in
+the filename.
+
+**Example:**
+```julia
+workflow = MyWorkflow(
+    steps = [
+        ("ppi",    GridPPIStep,    "qc",  true),
+        ("hybrid", HybridScanStep, "ppi", true),
+        # The output is a gridded PPI, so the standard plotter renders it
+        ("plot_hybrid", PlotDBZRainrateStep, "hybrid", false),
+    ],
+    daisho_config = "/path/to/daisho.toml",
+)
+```
+
+**Output:**
+- One file per chunk, named `gridded_hybrid_YYYYmmdd_HHMMSS.nc`
+- Same layout as a gridded PPI, so `Daisho.read_gridded_ppi` and the plot steps read
+  it back unchanged
+- Carries the configured fields plus `elevation_angle`, recording which tilt supplied
+  each cell (the `[io]` fill value where no tilt did)
+
+**Notes:**
+- A chunk with no PPI files, or a disabled `[hybrid_scan]` block, is a no-op rather
+  than an error.
+- The step is a thin wrapper over `Daisho.build_hybrid_scan`, which can also be
+  called directly to reprocess an existing archive of gridded PPIs.
+
+---
+
 ## Helper Functions
 
 ### get_scan_start

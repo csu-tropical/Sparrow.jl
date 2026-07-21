@@ -537,6 +537,7 @@ using SlurmClusterManager
         built_in_steps = [
             :GridRHIStep, :GridCompositeStep, :GridVolumeStep,
             :GridLatlonStep, :GridPPIStep, :GridQVPStep,
+            :HybridScanStep,
             :RadxConvertStep, :RoninQCStep,
             :PassThroughStep, :filterByTimeStep
         ]

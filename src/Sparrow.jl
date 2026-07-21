@@ -23,6 +23,7 @@ include("qc.jl")
 include("merge.jl")
 include("plot_steps.jl")
 include("grid.jl")
+include("hybrid.jl")
 include("utility.jl")
 
 export @workflow_type, @workflow_step, assign_workers, run_workflow, process_workflow
@@ -33,6 +34,7 @@ export discover_files, fetch_file, is_remote, has_data, get_data_source
 export poll_directory
 export RadxConvertStep, RoninQCStep
 export GridRHIStep, GridCompositeStep, GridVolumeStep, GridLatlonStep, GridPPIStep, GridQVPStep
+export HybridScanStep, hybrid_output_name
 export PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep, PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep
 export MergeVolumesStep, PiccoloMergeStep
 export PassThroughStep, filterByTimeStep
