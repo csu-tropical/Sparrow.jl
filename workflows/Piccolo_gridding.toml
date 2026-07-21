@@ -41,8 +41,13 @@ undetect   =  -9999.0   # ODIM _Undetect -- scanned, no detectable signal
 power_threshold     = 0.25
 horizontal_roi_factor = 0.75
 vertical_roi_factor   = 0.75
-range_floor           = 1.0
-range_weight_max      = 10.0
+range_guard_min       = 1.0    # near-radar guard: min range (m) for the range-weight divisor
+range_weight_max      = 10.0   # cap on the (unitless) range weight
+# Optional slant-range gate-inclusion filter (metres). Only gates with
+# range_minimum <= r <= range_maximum are gridded; useful to homogenise a volume
+# whose low sweep ranges farther than the others. Omit for no limit.
+# range_minimum       = 0.0
+# range_maximum       = 150000.0
 
 # Shared Cartesian base geometry. Products without their own [grid.<product>]
 # section inherit this. Here it is the 245 km "long" grid, which the composite
@@ -93,6 +98,33 @@ degincr = 0.02
 zmin    = 0.0
 zincr   = 1000.0
 zdim    = 19
+
+# Hybrid scan: the near-surface 2-D product built by HybridScanStep from the PPI
+# tilts of each 5-minute chunk. Starts from the 0.5 deg sweep and, wherever that
+# sweep has no measurement, takes the lowest higher tilt whose beam is still within
+# 1 km of the surface at that cell. RATE_CSU_BLENDED and HID_CSU come through
+# [fields] above (SEA-POL's QC chain computes them before gridding), so no [echo]
+# block is needed -- they are simply carried through the selection.
+#
+# fields = [] carries every gridded field, which keeps the output a drop-in gridded
+# PPI for the readers and the plot steps.
+[hybrid_scan]
+enabled              = true
+fields               = []
+select_field         = "DBZ"
+base_angle           = 0.5
+base_angle_tolerance = 0.05
+beam_height_maximum  = 1000.0   # metres above the antenna
+radar_altitude       = 20.0     # SEA-POL antenna height above the sea surface
+# false = take the lowest tilt with any measurement, so a tilt that scanned the cell and
+# saw clear air ends the search. Set true to reproduce the v2.0 archive, where the search
+# climbed past clear air looking for echo.
+require_detection    = false
+elevation_output     = "elevation_angle"
+height_output        = ""
+# Gridded PPIs written by this workflow carry `fixed_angle`; the pattern below is
+# only needed to reprocess the pre-fixed_angle v2.0 archive.
+# angle_pattern      = "_([0-9]+\\.[0-9]+)\\.nc$"
 
 # RHI (range-height) grid.
 [grid.rhi]

@@ -45,13 +45,24 @@ workflow = PiccoloGriddingWorkflow(
         ("ppi",       GridPPIStep,       "base_data", true),
         ("qvp",       GridQVPStep,       "base_data", true),
 
+        # Near-surface hybrid scan built from the PPI tilts of this chunk. Steps run
+        # in declaration order, so the "ppi" step's grids are already on disk.
+        # Configured by the [hybrid_scan] block of the Daisho TOML.
+        ("hybrid",    HybridScanStep,    "ppi",       true),
+
         # Plots of the 2D products (figures land in base_plot_dir/<name>/<date>).
         # The 3D volume/latlon and the QVP column profile have no plotter yet.
         ("plot_rhi",       PlotRHIStep,          "rhi",       false),
         ("plot_composite", PlotDBZCompositeStep, "composite", false),
         ("plot_ppi",       PlotDBZVelStep,       "ppi",       false),
         ("plot_ppi_vol",   PlotPPIVolStep,       "ppi",       false),
+        # The hybrid scan is a gridded PPI, so the existing DBZ/rain-rate plotter
+        # renders it unchanged -- this replaces the old standalone script's figures.
+        ("plot_hybrid",    PlotDBZRainrateStep,  "hybrid",    false),
     ],
+
+    # Rain-rate field for PlotDBZRainrateStep (also the default).
+    rainrate_field = "RATE_CSU_BLENDED",
 
     # PPI step grids every sweep with fixed_angle <= max_ppi_angle (degrees).
     max_ppi_angle = 90.0,
