@@ -105,6 +105,54 @@ end
     @test Sparrow.mean_volume_heading(_test_volume(with_heading = true)) ≈ 110.0
 end
 
+@testset "sweep_elevation_angle" begin
+    _sweep(; mode = "azimuth_surveillance", angle = 45.0) = Daisho.SweepGroup(
+        sweep_number = 1,
+        sweep_mode = mode,
+        fixed_angle = angle,
+        time = [DateTime(2024, 1, 1)],
+        range = collect(0.0:250.0:1000.0),
+        azimuth = [45.0],
+        elevation = [45.0],
+    )
+
+    # A PPI sweep passes its elevation straight through
+    @test Sparrow.sweep_elevation_angle(_sweep(), "QVP", "vol.nc", 1) == 45.0
+
+    # These modes do not store an elevation in fixed_angle, so they are rejected
+    # even when the volume filename does not say "RHI"
+    for mode in Sparrow.NON_ELEVATION_SWEEP_MODES
+        @test Sparrow.is_rhi_sweep(_sweep(mode = mode))
+        angle, output = _capture_stdout() do
+            Sparrow.sweep_elevation_angle(_sweep(mode = mode), "QVP", "vol.nc", 3)
+        end
+        @test angle === nothing
+        @test occursin("not an elevation angle", output)
+        @test occursin(mode, output)
+        @test occursin("vol.nc", output)
+        @test occursin("sweep 3", output)
+    end
+
+    # Sweep mode is matched case- and whitespace-insensitively
+    @test Sparrow.is_rhi_sweep(_sweep(mode = " RHI "))
+
+    # The azimuth-scanning modes from the CfRadial enumeration are all accepted,
+    # including the reader's default when the file has no sweep_mode variable
+    for mode in ("azimuth_surveillance", "sector", "manual_ppi", "vertical_pointing")
+        @test !Sparrow.is_rhi_sweep(_sweep(mode = mode))
+        @test Sparrow.sweep_elevation_angle(_sweep(mode = mode), "PPI", "vol.nc", 1) == 45.0
+    end
+
+    # A missing fixed_angle reads back as NaN: skipped with a warning rather
+    # than dropped silently by a comparison that is always false
+    angle, output = _capture_stdout() do
+        Sparrow.sweep_elevation_angle(_sweep(angle = NaN), "PPI", "vol.nc", 2)
+    end
+    @test angle === nothing
+    @test occursin("NaN", output)
+    @test occursin("PPI", output)
+end
+
 @testset "grid output naming includes seconds (issue #1)" begin
     t = DateTime(2022, 9, 17, 18, 40, 23)
     @test Sparrow.grid_output_name("rhi", t, 12.5) == "gridded_rhi_20220917_184023_12.5.nc"
