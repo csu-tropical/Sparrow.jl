@@ -4,9 +4,20 @@ function parse_arguments(args)
     s = ArgParseSettings()
     @add_arg_table! s begin
         "--datetime"
-            help = "Process a specific time YYYYmmdd_HHMMSS"
+            help = "Process a period starting at a specific time. Accepted formats: " *
+                   "YYYY, YYYYmm, YYYYmmdd, YYYYmmdd_HH, YYYYmmdd_HHMM, YYYYmmdd_HHMMSS"
             arg_type = String
             default = "now"
+        "--start"
+            help = "Start of the processing period (same formats as --datetime). " *
+                   "Must be given together with --stop"
+            arg_type = String
+            default = "none"
+        "--stop"
+            help = "End of the processing period, exclusive (same formats as --datetime). " *
+                   "Must be given together with --start"
+            arg_type = String
+            default = "none"
         "--realtime"
             help = "Process an incoming realtime datastream"
             action = :store_true

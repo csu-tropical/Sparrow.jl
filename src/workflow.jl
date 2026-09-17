@@ -263,6 +263,159 @@ function chunk_offsets(span_seconds::Int, num_seconds::Int; reverse::Bool=false)
 end
 
 """
+Human-readable list of the `datetime` formats accepted by
+[`parse_datetime_string`](@ref), used in error messages.
+"""
+const DATETIME_FORMATS = "YYYY, YYYYmm, YYYYmmdd, YYYYmmdd_HH, YYYYmmdd_HHMM, YYYYmmdd_HHMMSS"
+
+"""
+    parse_datetime_string(s) → (DateTime, Symbol)
+
+Parse a `datetime` specification into the `DateTime` it starts at and a symbol
+naming its precision. Exactly six formats are accepted:
+
+| String            | Length | Kind      | DateTime returned      |
+|-------------------|--------|-----------|------------------------|
+| `YYYY`            | 4      | `:year`   | midnight, Jan 1        |
+| `YYYYmm`          | 6      | `:month`  | midnight, 1st of month |
+| `YYYYmmdd`        | 8      | `:day`    | midnight that day      |
+| `YYYYmmdd_HH`     | 11     | `:hour`   | top of that hour       |
+| `YYYYmmdd_HHMM`   | 13     | `:minute` | that minute            |
+| `YYYYmmdd_HHMMSS` | 15     | `:second` | that second            |
+
+The returned `DateTime` is always the *start* of the window the string names; it
+is never aligned or truncated to a `span_seconds` boundary. How much data each
+kind covers is decided by [`process_workflow`](@ref).
+
+Any other length, a non-digit where a digit is expected, or an out-of-range
+field (month 13, hour 25, ...) raises an error listing the accepted formats.
+
+A `DateTime` is passed through unchanged with kind `:second`, and a `Date`
+becomes midnight that day with kind `:day`, so workflow parameters may be given
+either as strings or as `Dates` values.
+"""
+function parse_datetime_string(s::AbstractString)
+    str = String(s)
+    n = ncodeunits(str)
+    pattern, kind =
+        n == 4  ? (r"^[0-9]{4}$", :year) :
+        n == 6  ? (r"^[0-9]{6}$", :month) :
+        n == 8  ? (r"^[0-9]{8}$", :day) :
+        n == 11 ? (r"^[0-9]{8}_[0-9]{2}$", :hour) :
+        n == 13 ? (r"^[0-9]{8}_[0-9]{4}$", :minute) :
+        n == 15 ? (r"^[0-9]{8}_[0-9]{6}$", :second) :
+        msg_error("Invalid datetime \"$str\" (length $n). " *
+                  "Accepted formats are: $DATETIME_FORMATS.")
+    occursin(pattern, str) || msg_error(
+        "Invalid datetime \"$str\". Accepted formats are: $DATETIME_FORMATS.")
+
+    year = parse(Int, str[1:4])
+    month = kind === :year ? 1 : parse(Int, str[5:6])
+    day = kind in (:year, :month) ? 1 : parse(Int, str[7:8])
+    hour = kind in (:year, :month, :day) ? 0 : parse(Int, str[10:11])
+    minute = kind in (:year, :month, :day, :hour) ? 0 : parse(Int, str[12:13])
+    second = kind === :second ? parse(Int, str[14:15]) : 0
+
+    datetime = try
+        DateTime(year, month, day, hour, minute, second)
+    catch e
+        msg_error("Invalid datetime \"$str\": $(safe_exception_string(e)). " *
+                  "Accepted formats are: $DATETIME_FORMATS.")
+    end
+    return datetime, kind
+end
+parse_datetime_string(datetime::DateTime) = (datetime, :second)
+parse_datetime_string(date::Date) = (DateTime(date), :day)
+parse_datetime_string(datetime) =
+    msg_error("Invalid datetime $(repr(datetime)) of type $(typeof(datetime)). " *
+              "Use a DateTime or a string in one of: $DATETIME_FORMATS.")
+
+"""
+    time_window_chunks(start_time::DateTime, stop_time::DateTime, span_seconds::Integer;
+                       reverse::Bool=false) → Vector{Tuple{DateTime,DateTime}}
+
+Split the half-open interval `[start_time, stop_time)` into back-to-back chunks
+of `span_seconds`. Unlike [`chunk_offsets`](@ref), a trailing partial chunk is
+*clipped* to `stop_time` rather than dropped, so the whole requested window is
+always covered. Chunks are also split at midnight, because each volume reads
+its input from a single day directory; a chunk that would cross midnight ends
+at 00:00 and the next chunk starts there. Returns an empty vector when
+`stop_time <= start_time`, and the chunks in reverse chronological order when
+`reverse` is true.
+
+# Example
+```julia
+julia> time_window_chunks(DateTime(2024,1,1,14), DateTime(2024,1,1,14,25), 600)
+3-element Vector{Tuple{DateTime, DateTime}}:
+ (DateTime("2024-01-01T14:00:00"), DateTime("2024-01-01T14:10:00"))
+ (DateTime("2024-01-01T14:10:00"), DateTime("2024-01-01T14:20:00"))
+ (DateTime("2024-01-01T14:20:00"), DateTime("2024-01-01T14:25:00"))
+```
+"""
+function time_window_chunks(start_time::DateTime, stop_time::DateTime,
+                            span_seconds::Integer; reverse::Bool=false)
+    span = Int(span_seconds)
+    span > 0 || msg_error("span_seconds must be positive, got $span")
+    chunks = Tuple{DateTime,DateTime}[]
+    stop_time > start_time || return chunks
+    chunk_start = start_time
+    while chunk_start < stop_time
+        next_midnight = DateTime(Dates.Date(chunk_start)) + Dates.Day(1)
+        chunk_stop = min(chunk_start + Dates.Second(span), stop_time, next_midnight)
+        push!(chunks, (chunk_start, chunk_stop))
+        chunk_start = chunk_stop
+    end
+    return reverse ? Base.reverse(chunks) : chunks
+end
+
+"""
+    resolve_time_window(workflow::SparrowWorkflow) → Union{Nothing,Tuple{DateTime,DateTime}}
+
+Return the explicit processing period set by the `start_time` and `stop_time`
+workflow parameters (or the `--start`/`--stop` command-line options), or
+`nothing` when the workflow is driven by `datetime` instead.
+
+Both parameters must be given together, each may be a `DateTime` or any string
+accepted by [`parse_datetime_string`](@ref), and `stop_time` must be after
+`start_time`. The window is half-open: `[start_time, stop_time)`.
+"""
+function resolve_time_window(workflow::SparrowWorkflow)
+    has_start = haskey(workflow.params, "start_time")
+    has_stop = haskey(workflow.params, "stop_time")
+    if has_start != has_stop
+        missing_key = has_start ? "stop_time" : "start_time"
+        msg_error("Workflow parameter `$missing_key` is missing. " *
+                  "`start_time` and `stop_time` must be set together.")
+    end
+    has_start || return nothing
+
+    start_time, _ = parse_datetime_string(workflow["start_time"])
+    stop_time, _ = parse_datetime_string(workflow["stop_time"])
+    stop_time > start_time || msg_error(
+        "stop_time ($(Dates.format(stop_time, "YYYYmmdd_HHMMSS"))) must be after " *
+        "start_time ($(Dates.format(start_time, "YYYYmmdd_HHMMSS"))).")
+    return (start_time, stop_time)
+end
+
+"""
+    set_window_datetime(workflow::SparrowWorkflow) → String
+
+Set `workflow["datetime"]` to the start of the workflow's `start_time`/`stop_time`
+window, formatted as `YYYYmmdd_HHMMSS`, and log the window.
+
+The `datetime` parameter is kept in sync so log and directory names stay
+sensible, but [`process_workflow`](@ref) always prefers the explicit window.
+"""
+function set_window_datetime(workflow::SparrowWorkflow)
+    start_time = workflow["start_time"]::DateTime
+    stop_time = workflow["stop_time"]::DateTime
+    workflow["datetime"] = Dates.format(start_time, "YYYYmmdd_HHMMSS")
+    msg_info("Running in archive mode from $(Dates.format(start_time, "YYYYmmdd_HHMMSS")) " *
+             "to $(Dates.format(stop_time, "YYYYmmdd_HHMMSS"))")
+    return workflow["datetime"]
+end
+
+"""
     @workflow_type Name
 
 Create a new workflow type that inherits from [`SparrowWorkflow`](@ref).
@@ -468,6 +621,28 @@ end
 Internal function to set up workflow parameters from command-line arguments.
 
 Merges command-line arguments into the workflow's parameter dictionary.
+
+The processing period is resolved from the first of these that is present:
+
+1. `--datetime` on the command line (anything other than the default `"now"`).
+   Any `datetime` or `start_time`/`stop_time` in the workflow file is overridden
+   and the window pair is removed from the parameters.
+2. `--start`/`--stop` on the command line. Both must be given together; a
+   `datetime` in the workflow file is ignored.
+3. `start_time`/`stop_time` in the workflow file. Both must be given together,
+   and the workflow file may not also set `datetime`.
+4. `datetime` in the workflow file.
+5. `"now"`, i.e. the current time.
+
+Realtime mode accepts none of these and errors if any is supplied. When a
+start/stop window is active, `workflow["datetime"]` is set to the start of the
+window formatted as `YYYYmmdd_HHMMSS` so log names stay sensible, but
+[`process_workflow`](@ref) processes the whole window.
+
+# See Also
+- [`resolve_time_window`](@ref)
+- [`parse_datetime_string`](@ref)
+- [`process_workflow`](@ref)
 """
 function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     # This function can be used to set up any workflow specific parameters or directories before processing starts
@@ -478,28 +653,106 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     num_workers = length(workers())
     workflow["num_workers"] = num_workers
 
-    if parsed_args["realtime"] && parsed_args["datetime"] != "now"
+    cli_datetime = parsed_args["datetime"]
+    cli_start = get(parsed_args, "start", "none")
+    cli_stop = get(parsed_args, "stop", "none")
+    has_cli_datetime = cli_datetime != "now"
+    has_cli_start = cli_start != "none"
+    has_cli_stop = cli_stop != "none"
+    has_config_datetime = haskey(workflow.params, "datetime")
+    has_config_start = haskey(workflow.params, "start_time")
+    has_config_stop = haskey(workflow.params, "stop_time")
+    realtime = (haskey(workflow.params, "realtime") && workflow["realtime"]) || parsed_args["realtime"]
+
+    if realtime && has_cli_datetime
         msg_error("Cannot specify a datetime when running in realtime mode. Please remove the --datetime argument or remove the --realtime flag.")
     end
+    if realtime && (has_cli_start || has_cli_stop)
+        msg_error("Cannot specify --start/--stop when running in realtime mode. Please remove the --start and --stop arguments or remove the --realtime flag.")
+    end
+    if realtime && (has_config_start || has_config_stop)
+        msg_error("Cannot set start_time/stop_time in the workflow file when running in realtime mode. Please remove those parameters or turn off realtime mode.")
+    end
+    if has_cli_datetime && (has_cli_start || has_cli_stop)
+        msg_error("Cannot combine --datetime with --start/--stop. Please supply either a single --datetime or a --start/--stop pair.")
+    end
+    if has_cli_start != has_cli_stop
+        msg_error("Both --start and --stop must be given ($(has_cli_start ? "--stop" : "--start") is missing). " *
+                  "Accepted formats are: $DATETIME_FORMATS.")
+    end
 
-    if (haskey(workflow.params, "realtime") && workflow["realtime"]) || parsed_args["realtime"]
+    if realtime
         msg_info("Running in realtime mode")
         workflow["realtime"] = true
         workflow["datetime"] = "now"
     else
         workflow["realtime"] = false
-        datetime = parsed_args["datetime"]
-        if haskey(workflow.params, "datetime") && datetime != "now"
-            msg_info("Overriding datetime in workflow file with $datetime datetime provided in arguments")
-        end
-        workflow["datetime"] = datetime
 
-        # Fix if user mistakenly put "SEA" in front of the datetime
-        if (startswith(datetime, "SEA"))
-            workflow["datetime"] = datetime[4:end]
-        end
+        if has_cli_datetime
+            # 1. An explicit --datetime wins over anything in the workflow file.
+            if has_config_datetime
+                msg_info("Overriding datetime in workflow file with $cli_datetime datetime provided in arguments")
+            end
+            if has_config_start || has_config_stop
+                msg_info("Overriding start_time/stop_time in workflow file with $cli_datetime datetime provided in arguments")
+                delete!(workflow.params, "start_time")
+                delete!(workflow.params, "stop_time")
+            end
+            # Fix if user mistakenly put "SEA" in front of the datetime
+            workflow["datetime"] = startswith(cli_datetime, "SEA") ? cli_datetime[4:end] : cli_datetime
+            # Fail on a malformed datetime here rather than later on a worker
+            parse_datetime_string(workflow["datetime"])
+            msg_info("Running in archive mode on $(workflow["datetime"])")
 
-        msg_info("Running in archive mode on $(workflow["datetime"])")
+        elseif has_cli_start
+            # 2. An explicit --start/--stop pair wins over anything in the workflow file.
+            if has_config_datetime
+                msg_info("Ignoring datetime in workflow file in favor of the --start/--stop window provided in arguments")
+            end
+            if has_config_start || has_config_stop
+                msg_info("Overriding start_time/stop_time in workflow file with the window provided in arguments")
+            end
+            workflow["start_time"] = cli_start
+            workflow["stop_time"] = cli_stop
+            # Parses both ends and validates that the window runs forwards
+            start_time, stop_time = resolve_time_window(workflow)
+            workflow["start_time"] = start_time
+            workflow["stop_time"] = stop_time
+            set_window_datetime(workflow)
+
+        elseif has_config_start || has_config_stop
+            # 3. A start_time/stop_time pair in the workflow file.
+            if has_config_datetime
+                msg_error("The workflow file sets both datetime and start_time/stop_time, which is ambiguous. " *
+                          "Keep one of them, or override them on the command line with --datetime or --start/--stop.")
+            end
+            # resolve_time_window errors if only one of the two is present.
+            start_time, stop_time = resolve_time_window(workflow)
+            workflow["start_time"] = start_time
+            workflow["stop_time"] = stop_time
+            set_window_datetime(workflow)
+
+        elseif has_config_datetime
+            # 4. A datetime in the workflow file (not clobbered by the "now" default).
+            config_datetime = workflow["datetime"]
+            if config_datetime isa Date
+                # A Date means the whole day, so keep the 8-digit form
+                config_datetime = Dates.format(config_datetime, "YYYYmmdd")
+            elseif !(config_datetime isa AbstractString)
+                config_datetime = Dates.format(first(parse_datetime_string(config_datetime)),
+                                               "YYYYmmdd_HHMMSS")
+            end
+            # Fix if user mistakenly put "SEA" in front of the datetime
+            workflow["datetime"] = startswith(config_datetime, "SEA") ? config_datetime[4:end] : config_datetime
+            # Fail on a malformed datetime here rather than later on a worker
+            workflow["datetime"] == "now" || parse_datetime_string(workflow["datetime"])
+            msg_info("Running in archive mode on $(workflow["datetime"])")
+
+        else
+            # 5. Nothing specified anywhere: process the current time.
+            workflow["datetime"] = "now"
+            msg_info("Running in archive mode on now")
+        end
     end
 
     if parsed_args["force_reprocess"]
@@ -809,27 +1062,53 @@ Used when running without distributed workers.
 Processes all time windows and workflow steps sequentially without using
 distributed workers. Useful for debugging or when parallelization is not needed.
 
-The `datetime` workflow parameter selects the processing window:
-- `YYYY` — process a whole year
-- `YYYYmm` — process a whole month
-- `YYYYmmdd` — process a whole day
-- `YYYYmmdd_HH` — process a single hour
-- `YYYYmmdd_HHMM` — process a window starting at minute precision
-- `YYYYmmdd_HHMMSS` — process a window starting at second precision
+The processing period comes from either an explicit `start_time`/`stop_time`
+window or the `datetime` workflow parameter.
 
-The window length within each branch is `span_seconds`, resolved via
-[`resolve_span_seconds`](@ref).
+## `start_time` / `stop_time`
+
+If both are set (in the workflow file, or via `--start`/`--stop`), the half-open
+window `[start_time, stop_time)` is split into `span_seconds` chunks. The final
+chunk is clipped to `stop_time` rather than dropped, so the whole window is
+covered, and chunks are split at midnight so each volume reads a single day
+directory. Days with no data are skipped.
+
+## `datetime`
+
+`datetime` is always the *start* of the window and is never aligned or truncated
+to a `span_seconds` boundary. Its length selects how much is processed:
+
+| `datetime`        | Window processed                                        |
+|-------------------|---------------------------------------------------------|
+| `YYYY`            | the whole year, chunked by `span_seconds`               |
+| `YYYYmm`          | the whole month, chunked by `span_seconds`              |
+| `YYYYmmdd`        | that whole day, chunked by `span_seconds`               |
+| `YYYYmmdd_HH`     | that whole hour, chunked by `span_seconds`              |
+| `YYYYmmdd_HHMM`   | one window, `[that minute, that minute + span_seconds)` |
+| `YYYYmmdd_HHMMSS` | one window, `[that second, that second + span_seconds)` |
+
+Any other length raises an error listing the accepted formats.
+
+Year, month, day and hour runs are chunked from the start of the year, month,
+day or hour. If `span_seconds` does not divide the range evenly the trailing
+partial chunk is *not* processed (a warning is emitted); use
+`start_time`/`stop_time` to process a partial window instead.
+
+The chunk length is `span_seconds`, resolved via [`resolve_span_seconds`](@ref).
+Set `reverse = true` to walk the chunks in reverse chronological order.
 
 # See Also
 - [`assign_workers`](@ref)
 - [`run_workflow`](@ref)
 - [`resolve_span_seconds`](@ref)
+- [`resolve_time_window`](@ref)
+- [`parse_datetime_string`](@ref)
+- [`time_window_chunks`](@ref)
 - [`chunk_offsets`](@ref)
 """
 function process_workflow(workflow::SparrowWorkflow)
 
     # Set the local variables from the workflow
-    datetime = workflow["datetime"]
     span_seconds = resolve_span_seconds(workflow)
     force_reprocess = workflow["force_reprocess"]
     reverse_order = workflow["reverse"]
@@ -838,43 +1117,59 @@ function process_workflow(workflow::SparrowWorkflow)
     # `skip_failed_volumes = true` in the workflow to log and continue instead.
     skip_failed_volumes = get_param(workflow, "skip_failed_volumes", false)
 
-    # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
-    if datetime == "now"
-        datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
-    end
-
-    if length(datetime) < 4
-        msg_error("Invalid datetime format $(datetime), needs to be at least YYYY")
-    end
-    year = datetime[1:4]
-
     # Get data source for checking data availability
     source = get_data_source(workflow)
 
     # Count of volumes skipped due to errors (only when skip_failed_volumes)
     skipped = 0
 
-    # Helper to process all span_seconds chunks within a single day. Each volume's
-    # markers are written as soon as it finishes archiving, so a crash partway
-    # through leaves completed volumes marked and skippable on restart.
+    # Helper to process a single chunk. The markers are written as soon as the
+    # volume finishes archiving, so a crash partway through a batch leaves
+    # completed volumes marked and skippable on restart.
+    function process_chunk(start_time::DateTime, stop_time::DateTime)
+        msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
+        try
+            processed, archived = process_volume(workflow, start_time, stop_time)
+            mark_processed(workflow, processed, base_archive_dir)
+            mark_processed(workflow, archived, base_archive_dir)
+        catch e
+            skip_failed_volumes || rethrow()
+            skipped += 1
+            msg_warning("Skipping volume $(Dates.format(start_time, "YYYYmmdd_HHMMSS")): " *
+                        safe_exception_string(e))
+            flush(stdout)
+        end
+    end
+
+    # Warn once per run if span_seconds does not tile the fixed-length ranges
+    # (day, hour) evenly, since the trailing partial chunk is not processed.
+    partial_warned = false
+    function warn_partial_chunks(num_seconds::Int)
+        partial_warned && return nothing
+        if span_seconds > num_seconds
+            partial_warned = true
+            msg_warning("span_seconds ($(span_seconds)s) is longer than the $(num_seconds)s " *
+                        "range selected by datetime, so nothing will be processed. " *
+                        "Use start_time/stop_time to process a window of arbitrary length.")
+        elseif num_seconds % span_seconds != 0
+            partial_warned = true
+            msg_warning("span_seconds ($(span_seconds)s) does not divide the $(num_seconds)s " *
+                        "range selected by datetime evenly; the trailing " *
+                        "$(num_seconds % span_seconds)s will not be processed. " *
+                        "Use start_time/stop_time to process the remainder.")
+        end
+        return nothing
+    end
+
+    # Helper to process all span_seconds chunks within a single day.
     function process_day_chunks(day_dt::DateTime;
                                 hour_offset::Int=0, num_seconds::Int=86400)
+        warn_partial_chunks(num_seconds)
         timerange = chunk_offsets(span_seconds, num_seconds; reverse=reverse_order)
         for t in timerange
             start_time = day_dt + Dates.Hour(hour_offset) + Dates.Second(t)
             stop_time = start_time + Dates.Second(span_seconds)
-            msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
-            try
-                processed, archived = process_volume(workflow, start_time, stop_time)
-                mark_processed(workflow, processed, base_archive_dir)
-                mark_processed(workflow, archived, base_archive_dir)
-            catch e
-                skip_failed_volumes || rethrow()
-                skipped += 1
-                msg_warning("Skipping volume $(Dates.format(start_time, "YYYYmmdd_HHMMSS")): " *
-                            safe_exception_string(e))
-                flush(stdout)
-            end
+            process_chunk(start_time, stop_time)
         end
     end
 
@@ -892,76 +1187,88 @@ function process_workflow(workflow::SparrowWorkflow)
         end
     end
 
-    if length(datetime) == 4
-        # Process a whole year (YYYY)
-        base_datetime = DateTime(parse(Int64, year))
-        num_days = Dates.value(DateTime(parse(Int64, year) + 1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
-        msg_info("Processing year $year ($num_days days)...")
+    # An explicit start_time/stop_time window takes precedence over datetime
+    window = resolve_time_window(workflow)
+
+    if window !== nothing
+        # Process an arbitrary window, clipping the final chunk to stop_time
+        window_start, window_stop = window
+        msg_info("Processing $(Dates.format(window_start, "YYYYmmdd_HHMMSS")) to " *
+                 "$(Dates.format(window_stop, "YYYYmmdd_HHMMSS")) in $(span_seconds)s chunks...")
         flush(stdout)
-        process_day_range(base_datetime, 0:(num_days - 1))
-    elseif length(datetime) == 6
-        # Process a whole month (YYYYmm)
-        month = datetime[5:6]
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month))
-        next_month = base_datetime + Dates.Month(1)
-        num_days = Dates.value(next_month - base_datetime) ÷ (1000 * 60 * 60 * 24)
-        msg_info("Processing month $year-$month ($num_days days)...")
-        flush(stdout)
-        process_day_range(base_datetime, 0:(num_days - 1))
-    elseif length(datetime) == 8
-        # Process one day (YYYYmmdd)
-        month = datetime[5:6]
-        day = datetime[7:8]
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
-        msg_info("Processing one day...")
-        flush(stdout)
-        if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
-            msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
+        # has_data is a directory listing (a network call for remote sources),
+        # so check each day once rather than once per chunk.
+        day_has_data = Dict{String,Bool}()
+        any_processed = false
+        for (chunk_start, chunk_stop) in time_window_chunks(window_start, window_stop,
+                                                            span_seconds; reverse=reverse_order)
+            day = Dates.format(chunk_start, "YYYYmmdd")
+            available = get!(day_has_data, day) do
+                found = has_data(source, day)
+                if !found
+                    msg_info("No data for $day, skipping...")
+                    flush(stdout)
+                end
+                found
+            end
+            available || continue
+            any_processed = true
+            process_chunk(chunk_start, chunk_stop)
+        end
+        if !any_processed
+            msg_info("No data in any day of the requested window, nothing to do...")
             flush(stdout)
             return "not processed due to missing data"
         end
-        process_day_chunks(base_datetime)
-    elseif length(datetime) == 11
-        # Process one hour (YYYYmmdd_HH)
-        month = datetime[5:6]
-        day = datetime[7:8]
-        hr = datetime[10:11]
-        base_datetime = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day))
-        msg_info("Processing one hour...")
-        if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
-            msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
-            flush(stdout)
-            return "not processed due to missing data"
-        end
-        flush(stdout)
-        process_day_chunks(base_datetime;
-                          hour_offset=parse(Int64, hr), num_seconds=3600)
-    elseif length(datetime) == 15
-        # Process a specific time window with second precision (YYYYmmdd_HHMMSS)
-        month = datetime[5:6]
-        day = datetime[7:8]
-        hr = datetime[10:11]
-        mn = datetime[12:13]
-        sc = datetime[14:15]
-        start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day),
-                              parse(Int64, hr), parse(Int64, mn), parse(Int64, sc))
-        stop_time = start_time + Dates.Second(span_seconds)
-        msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
-        processed, archived = process_volume(workflow, start_time, stop_time)
-        mark_processed(workflow, processed, base_archive_dir)
-        mark_processed(workflow, archived, base_archive_dir)
     else
-        # Process a specific time window with minute precision (YYYYmmdd_HHMM or longer)
-        month = datetime[5:6]
-        day = datetime[7:8]
-        hr = datetime[10:11]
-        min = datetime[12:13]
-        start_time = DateTime(parse(Int64, year), parse(Int64, month), parse(Int64, day), parse(Int64, hr), parse(Int64, min))
-        stop_time = start_time + Dates.Second(span_seconds)
-        msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMM"))...")
-        processed, archived = process_volume(workflow, start_time, stop_time)
-        mark_processed(workflow, processed, base_archive_dir)
-        mark_processed(workflow, archived, base_archive_dir)
+        datetime = get_param(workflow, "datetime", "now")
+
+        # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
+        if datetime == "now"
+            datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
+        end
+
+        base_datetime, kind = parse_datetime_string(datetime)
+
+        if kind === :year
+            # Process a whole year (YYYY)
+            num_days = Dates.value(base_datetime + Dates.Year(1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
+            msg_info("Processing year $(Dates.format(base_datetime, "YYYY")) ($num_days days)...")
+            flush(stdout)
+            process_day_range(base_datetime, 0:(num_days - 1))
+        elseif kind === :month
+            # Process a whole month (YYYYmm)
+            num_days = Dates.value(base_datetime + Dates.Month(1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
+            msg_info("Processing month $(Dates.format(base_datetime, "YYYY-mm")) ($num_days days)...")
+            flush(stdout)
+            process_day_range(base_datetime, 0:(num_days - 1))
+        elseif kind === :day
+            # Process one day (YYYYmmdd)
+            msg_info("Processing one day...")
+            flush(stdout)
+            if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
+                msg_info("No data for $(Dates.format(base_datetime, "YYYYmmdd")), nothing to do...")
+                flush(stdout)
+                return "not processed due to missing data"
+            end
+            process_day_chunks(base_datetime)
+        elseif kind === :hour
+            # Process one hour (YYYYmmdd_HH)
+            day_dt = DateTime(Dates.Date(base_datetime))
+            msg_info("Processing one hour...")
+            if !has_data(source, Dates.format(day_dt, "YYYYmmdd"))
+                msg_info("No data for $(Dates.format(day_dt, "YYYYmmdd")), nothing to do...")
+                flush(stdout)
+                return "not processed due to missing data"
+            end
+            flush(stdout)
+            process_day_chunks(day_dt;
+                              hour_offset=Dates.hour(base_datetime), num_seconds=3600)
+        else
+            # Process a single window starting at the given minute or second
+            # (YYYYmmdd_HHMM or YYYYmmdd_HHMMSS)
+            process_chunk(base_datetime, base_datetime + Dates.Second(span_seconds))
+        end
     end
 
     flush(stdout)

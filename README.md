@@ -156,7 +156,10 @@ See the [Provided Workflow Steps](https://csu-tropical.github.io/Sparrow.jl/dev/
 sparrow workflow.jl [options]
 
 Options:
-  --datetime DATETIME       Process specific time YYYYmmdd_HHMMSS (default: "now")
+  --datetime DATETIME       Start of the processing period: YYYY, YYYYmm, YYYYmmdd,
+                            YYYYmmdd_HH, YYYYmmdd_HHMM or YYYYmmdd_HHMMSS (default: "now")
+  --start DATETIME          Start of the processing period (same formats), with --stop
+  --stop DATETIME           End of the processing period, exclusive, with --start
   --realtime                Process an incoming realtime datastream
   --num_workers N           Number of distributed workers
   --threads N               Number of threads per worker

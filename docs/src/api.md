@@ -397,7 +397,10 @@ The `sparrow` script provides the command-line interface. Options:
 
 ```
 workflow                  Workflow file to execute (required, positional)
---datetime DATETIME       Process specific time YYYYmmdd_HHMMSS (default: "now")
+--datetime DATETIME       Start of the processing period: YYYY, YYYYmm, YYYYmmdd,
+                          YYYYmmdd_HH, YYYYmmdd_HHMM or YYYYmmdd_HHMMSS (default: "now")
+--start DATETIME          Start of the processing period (same formats), with --stop
+--stop DATETIME           End of the processing period, exclusive, with --start
 --realtime                Process an incoming realtime datastream
 --force_reprocess         Force reprocessing of previously processed data
 --threads N               Number of threads
@@ -413,6 +416,18 @@ workflow                  Workflow file to execute (required, positional)
 sparrow my_workflow.jl --datetime 20240101_000000 \
     --num_workers 4 --threads 2 -v 2
 ```
+
+Or with an explicit processing period:
+```bash
+sparrow my_workflow.jl --start 20240101_1400 --stop 20240102_0600 \
+    --num_workers 4
+```
+
+The `datetime` is the start of the period and is not aligned to a
+`span_seconds` boundary; see
+[Selecting the Processing Period](@ref) for what each format covers and how
+`--datetime`, `--start`/`--stop` and the workflow-file parameters take
+precedence.
 
 ## Extended Example
 
