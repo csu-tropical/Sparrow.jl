@@ -304,6 +304,14 @@ workflow = MyWorkflow(
 - One file per PPI sweep
 - 2D horizontal grids
 
+**Sweep selection:** Only sweeps whose `fixed_angle` is an elevation are
+considered. The elevation-scanning CfRadial modes (`rhi`, `manual_rhi`,
+`sunscan_rhi`, `elevation_surveillance`) store the sweep azimuth in
+`fixed_angle`, and `coplane` stores the coplane rotation angle; all are skipped
+with a warning, even when they appear inside a volume whose filename does not
+contain "RHI". A sweep with a missing `fixed_angle` (`NaN`) is likewise skipped
+with a warning rather than silently failing the threshold comparison.
+
 ---
 
 ### GridQVPStep
@@ -336,6 +344,14 @@ workflow = MyWorkflow(
 - Files named: `gridded_qvp_YYYYmmdd_HHMMSS_EE.E.nc`
 - Vertical profiles averaged azimuthally
 - Useful for precipitation microphysics studies
+
+**Sweep selection:** Same rules as `GridPPIStep` — sweeps whose `fixed_angle` is
+not an elevation, and sweeps with a missing `fixed_angle`, are skipped with a
+warning instead of being compared against `min_qvp_angle`. The angle in the output filename is always the
+`fixed_angle` that passed the threshold, so a filename below `min_qvp_angle`
+means that run used a different `min_qvp_angle`, or the file is left over from
+an earlier run (archived products are never overwritten without
+`--force_reprocess`).
 
 ---
 

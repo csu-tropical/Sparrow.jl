@@ -31,6 +31,60 @@ single_sweep_volume(vol::Volume, i::Integer) =
     Volume((f === :sweeps ? [vol.sweeps[i]] : getfield(vol, f)
             for f in fieldnames(Volume))...)
 
+# CfRadial `sweep_mode` values whose `fixed_angle` is not an elevation angle.
+# The full enumeration is the one Daisho writes as the `options` attribute of the
+# sweep_mode variable: sector, coplane, rhi, vertical_pointing, idle,
+# azimuth_surveillance, elevation_surveillance, sunscan, pointing, calibration,
+# manual_ppi, manual_rhi, sunscan_rhi, doppler_beam_swinging, complex_trajectory,
+# electronic_steering. The elevation-scanning modes below hold the sweep azimuth
+# in `fixed_angle`; `coplane` holds the coplane rotation angle about the
+# baseline. Either way the value is not an elevation, so the PPI/QVP thresholds
+# cannot be applied to it.
+const NON_ELEVATION_SWEEP_MODES = ("rhi", "manual_rhi", "sunscan_rhi",
+    "elevation_surveillance", "coplane")
+
+"""
+    is_rhi_sweep(sweep) → Bool
+
+True when `sweep`'s `fixed_angle` is not an elevation angle: the elevation-
+scanning modes (`rhi`, `manual_rhi`, `sunscan_rhi`, `elevation_surveillance`),
+which store the sweep azimuth there, and `coplane`, which stores the coplane
+rotation angle. An elevation threshold (`max_ppi_angle`, `min_qvp_angle`) must
+never be compared against those values.
+"""
+is_rhi_sweep(sweep) = lowercase(strip(sweep.sweep_mode)) in NON_ELEVATION_SWEEP_MODES
+
+"""
+    sweep_elevation_angle(sweep, product, file, i) → Union{Float64,Nothing}
+
+Elevation angle of sweep `i` for the elevation-thresholded products (PPI, QVP),
+or `nothing` when the sweep has no usable elevation and must be skipped.
+
+Two cases are rejected, both with a warning naming the file and sweep, since
+either would otherwise pass or fail the threshold silently:
+
+- a sweep whose `fixed_angle` is not an elevation (see [`is_rhi_sweep`]). The
+  step's filename check only catches RHI *volumes* named "RHI"; this catches RHI
+  sweeps embedded in a volume whose name does not say so.
+- a missing `fixed_angle`, read back as `NaN`. Every comparison with `NaN` is
+  false, so the sweep would be dropped with no explanation.
+"""
+function sweep_elevation_angle(sweep, product::String, file::String, i::Integer)
+    if is_rhi_sweep(sweep)
+        msg_warning("Skipping $(product) for sweep $i of $(basename(file)): " *
+            "sweep_mode is \"$(sweep.sweep_mode)\", so fixed_angle " *
+            "($(sweep.fixed_angle)) is not an elevation angle.")
+        return nothing
+    end
+    angle = sweep.fixed_angle
+    if isnan(angle)
+        msg_warning("Skipping $(product) for sweep $i of $(basename(file)): " *
+            "fixed_angle is missing (NaN), so its elevation cannot be checked.")
+        return nothing
+    end
+    return angle
+end
+
 """
     mean_volume_heading(vol::Volume) → Float64
 
@@ -184,7 +238,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridPPIStep}, input_dir
             heading = mean_volume_heading(volume)
             grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             for i in eachindex(volume.sweeps)
-                angle = volume.sweeps[i].fixed_angle
+                angle = sweep_elevation_angle(volume.sweeps[i], "PPI", file, i)
+                angle === nothing && continue
                 if angle <= max_ppi_angle
                     output_file = joinpath(output_dir,
                         grid_output_name("ppi", scan_start, angle))
@@ -211,7 +266,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{GridQVPStep}, input_dir
             volume = Daisho.read_cfradial(file)
             grid_time = grid_index_time(index_mode, scan_start, start_time, stop_time)
             for i in eachindex(volume.sweeps)
-                angle = volume.sweeps[i].fixed_angle
+                angle = sweep_elevation_angle(volume.sweeps[i], "QVP", file, i)
+                angle === nothing && continue
                 if angle >= min_qvp_angle
                     output_file = joinpath(output_dir,
                         grid_output_name("qvp", scan_start, angle))
