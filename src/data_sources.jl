@@ -13,12 +13,37 @@ All data sources must implement:
 
 The `date` parameter is a string of variable length:
 - `"YYYYMMDD"` — day-level
-- `"YYYYMMDDHH"` — hour-level
-- `"YYYYMMDDHHmm"` — minute-level
+- `"YYYYMMDDhh"` — hour-level
+- `"YYYYMMDDhhmm"` — minute-level
 """
 abstract type DataSource end
 
 # --- Date placeholder substitution ---
+
+"""
+    LEGACY_PLACEHOLDER_ALIASES
+
+Older spellings of two placeholder tokens, kept working for good: they were
+public `prefix_template`/`base_url` syntax before the tokens moved to ISO 8601
+notation. Each maps to its canonical form, which is what documentation and
+error messages use. See [`_canonical_placeholders`](@ref).
+"""
+const LEGACY_PLACEHOLDER_ALIASES = ("{YYYYmmdd}" => "{YYYYMMDD}", "{HH}" => "{hh}")
+
+"""
+    _canonical_placeholders(template) → String
+
+`template` with every [legacy placeholder spelling](@ref
+LEGACY_PLACEHOLDER_ALIASES) rewritten to its canonical form, so the rest of the
+placeholder machinery only ever sees `{YYYYMMDD}` and `{hh}`.
+"""
+function _canonical_placeholders(template::AbstractString)
+    out = String(template)
+    for (legacy, canonical) in LEGACY_PLACEHOLDER_ALIASES
+        out = replace(out, legacy => canonical)
+    end
+    return out
+end
 
 """
     substitute_date_placeholders(template, date) → String
@@ -32,37 +57,40 @@ date-aware base directories (`base_data_dir`, `base_archive_dir`,
 throughout the [`DataSource`](@ref) interface. The substitutions performed
 depend on how much of the date string is present:
 
-- `length(date) >= 8`: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`
-- `length(date) >= 10`: `{HH}`, `{YYYYmmdd_HH}`
-- `length(date) >= 12`: `{mm}`, `{YYYYmmdd_HHMM}`
+- `length(date) >= 8`: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYMMDD}`
+- `length(date) >= 10`: `{hh}`, `{YYYYMMDD_hh}`
+- `length(date) >= 12`: `{mm}`, `{YYYYMMDD_hhmm}`
 
 Placeholders with no available value are left untouched. A `DateTime` is
-formatted as `"YYYYmmddHHMM"` first, so every placeholder is substituted.
+formatted as `"YYYYMMDDhhmm"` first, so every placeholder is substituted.
+
+The [legacy spellings](@ref LEGACY_PLACEHOLDER_ALIASES) `{YYYYmmdd}` and `{HH}`
+are still accepted silently as aliases of `{YYYYMMDD}` and `{hh}`.
 
 # Example
 ```julia
 substitute_date_placeholders("/archive/{YYYY}/{MM}/{DD}", "20240101")  # "/archive/2024/01/01"
-substitute_date_placeholders("/data/{YYYYmmdd_HH}", "2024010113")      # "/data/20240101_13"
+substitute_date_placeholders("/data/{YYYYMMDD_hh}", "2024010113")      # "/data/20240101_13"
 ```
 """
 function substitute_date_placeholders(template::AbstractString, date::AbstractString)
-    out = String(template)
-    # The combined tokens are replaced first so their leading "{YYYYmmdd" is
+    out = _canonical_placeholders(template)
+    # The combined tokens are replaced first so their leading "{YYYYMMDD" is
     # never consumed by the shorter tokens.
     if length(date) >= 12
-        out = replace(out, "{YYYYmmdd_HHMM}" => date[1:8] * "_" * date[9:12])
+        out = replace(out, "{YYYYMMDD_hhmm}" => date[1:8] * "_" * date[9:12])
     end
     if length(date) >= 10
-        out = replace(out, "{YYYYmmdd_HH}" => date[1:8] * "_" * date[9:10])
+        out = replace(out, "{YYYYMMDD_hh}" => date[1:8] * "_" * date[9:10])
     end
     if length(date) >= 8
         out = replace(out, "{YYYY}" => date[1:4])
         out = replace(out, "{MM}" => date[5:6])
         out = replace(out, "{DD}" => date[7:8])
-        out = replace(out, "{YYYYmmdd}" => date[1:8])
+        out = replace(out, "{YYYYMMDD}" => date[1:8])
     end
     if length(date) >= 10
-        out = replace(out, "{HH}" => date[9:10])
+        out = replace(out, "{hh}" => date[9:10])
     end
     if length(date) >= 12
         out = replace(out, "{mm}" => date[11:12])
@@ -87,9 +115,9 @@ The directory actually read for a given time is resolved by [`dated_dir`](@ref):
 
 - `base_dir` contains a [date placeholder](@ref DATE_PLACEHOLDERS) → the
   placeholders are substituted and nothing is appended. The finest token present
-  sets the directory unit: `{YYYYmmdd}` is a day, `{YYYYmmdd}/{HH}` an hour,
-  `{YYYYmmdd_HHMM}` a minute.
-- otherwise, with `date_subdir = true` (the default) → `base_dir/YYYYmmdd`.
+  sets the directory unit: `{YYYYMMDD}` is a day, `{YYYYMMDD}/{hh}` an hour,
+  `{YYYYMMDD_hhmm}` a minute.
+- otherwise, with `date_subdir = true` (the default) → `base_dir/YYYYMMDD`.
 - otherwise, with `date_subdir = false` → `base_dir` itself, a flat directory
   holding every date's files.
 
@@ -100,7 +128,7 @@ still answers "is there data that day" whatever the directory unit is.
 
 # Fields
 - `base_dir::String`: Base directory, optionally containing date placeholders
-- `date_subdir::Bool`: Append a `YYYYmmdd` directory level when `base_dir` has
+- `date_subdir::Bool`: Append a `YYYYMMDD` directory level when `base_dir` has
   no placeholder (default `true`)
 """
 struct LocalDirSource <: DataSource
@@ -130,7 +158,7 @@ _is_flat(source::LocalDirSource) = !has_date_placeholder(source.base_dir) && !so
 
 Time organization unit of the source's directory tree: the
 [`placeholder_resolution`](@ref) of `base_dir` if it has any placeholder, else
-`:day` when `date_subdir` appends a `YYYYmmdd` level, else `:none` for a flat
+`:day` when `date_subdir` appends a `YYYYMMDD` level, else `:none` for a flat
 directory.
 """
 function source_resolution(source::LocalDirSource)
@@ -185,7 +213,7 @@ end
 """
     _filter_names_by_day(files, date) → Vector{String}
 
-[`_filter_names_by_window`](@ref) over the whole day of `date` (`"YYYYmmdd"`,
+[`_filter_names_by_window`](@ref) over the whole day of `date` (`"YYYYMMDD"`,
 longer strings are truncated to the day).
 """
 function _filter_names_by_day(files::AbstractVector{<:AbstractString}, date::AbstractString)
@@ -211,8 +239,8 @@ function _date_window(date::AbstractString)
         t = DateTime(s[1:8], dateformat"YYYYmmdd")
         return (t, t + Dates.Day(1))
     end
-    msg_error("Date string \"$date\" is too short. Expected YYYYmmdd (a day), " *
-              "YYYYmmddHH (an hour) or YYYYmmddHHMM (a minute).")
+    msg_error("Date string \"$date\" is too short. Expected YYYYMMDD (a day), " *
+              "YYYYMMDDhh (an hour) or YYYYMMDDhhmm (a minute).")
 end
 
 """
@@ -229,12 +257,14 @@ _local_dir(source::LocalDirSource, date) = dated_dir(source.base_dir, date, sour
 The deepest directory of `source`'s tree that is fixed once the *day* of `t` is
 known: the template with only its day-level tokens substituted, cut before the
 first component that still holds an hour or minute token. For a day-level
-layout this is the day directory itself; for `/data/{YYYYmmdd}/{HH}` it is
+layout this is the day directory itself; for `/data/{YYYYMMDD}/{hh}` it is
 `/data/20240101`. Checking it first lets a day with no data at all be rejected
 with one `isdir` instead of one per hour or minute directory.
 """
 function _coarse_prefix(source::LocalDirSource, t::DateTime)
     _is_flat(source) && return source.base_dir
+    # `has_date_placeholder` and `substitute_date_placeholders` both canonicalize
+    # the legacy token spellings first, so this reads either spelling as it is.
     has_date_placeholder(source.base_dir) || return _local_dir(source, t)
     # An 8-digit date substitutes only the day-level tokens
     partial = substitute_date_placeholders(source.base_dir, Dates.format(t, "YYYYmmdd"))
@@ -329,7 +359,7 @@ is_remote(::LocalDirSource) = false
 
 function has_data(source::LocalDirSource, date::String)
     window_start, window_stop = _date_window(date)
-    # A dated directory (placeholder or `YYYYmmdd` subdirectory) covers a known
+    # A dated directory (placeholder or `YYYYMMDD` subdirectory) covers a known
     # slice of time by construction, so the existence of any unit directory the
     # window touches is the answer. A flat directory holds every date at once, so
     # look at the filenames instead — otherwise a month or year run would think
@@ -375,7 +405,8 @@ full AWS Signature V4 authentication.
 # Fields
 - `bucket::String`: S3 bucket name (e.g., "unidata-nexrad-level2")
 - `prefix_template::String`: Template for S3 key prefix with placeholders:
-  `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`, `{HH}`, `{mm}`.
+  `{YYYY}`, `{MM}`, `{DD}`, `{YYYYMMDD}`, `{hh}`, `{mm}` (the legacy spellings
+  `{YYYYmmdd}` and `{HH}` still work).
   Additional placeholders can be defined via `extras`.
 - `extras::Dict{String,String}`: Additional template variables. Keys become
   `{key}` placeholders in the prefix template.
@@ -485,17 +516,18 @@ end
 """
     _s3_needs_hour_iteration(source::S3BucketSource, date::String)
 
-Check if the prefix template contains `{HH}` but the date string doesn't include an hour.
+Check if the prefix template contains `{hh}` (or its legacy alias `{HH}`) but
+the date string doesn't include an hour.
 """
 function _s3_needs_hour_iteration(source::S3BucketSource, date::String)
-    return occursin("{HH}", source.prefix_template) && length(date) < 10
+    return occursin("{hh}", _canonical_placeholders(source.prefix_template)) && length(date) < 10
 end
 
 function discover_files(source::S3BucketSource, date::String)
     if _s3_needs_hour_iteration(source, date)
-        msg_warning("Prefix template contains {HH} but only a day-level date was provided. " *
+        msg_warning("Prefix template contains {hh} but only a day-level date was provided. " *
                     "Iterating over all 24 hours — this may be slow for large datasets. " *
-                    "Pass a 10-character date string (YYYYMMDDHH) to select a specific hour.")
+                    "Pass a 10-character date string (YYYYMMDDhh) to select a specific hour.")
         all_files = String[]
         for hh in 0:23
             hour_date = date * lpad(hh, 2, '0')
@@ -601,7 +633,7 @@ files = discover_files(source, "20250101")
 function RTMASource(; station::String = "rtma2p5", file_pattern::Regex = r"\.grb2(_wexp)?$")
     S3BucketSource(
         bucket = "noaa-rtma-pds",
-        prefix_template = "{station}.{YYYYmmdd}/",
+        prefix_template = "{station}.{YYYYMMDD}/",
         extras = Dict("station" => station),
         file_pattern = file_pattern,
     )
@@ -612,7 +644,7 @@ end
 
 Create an S3BucketSource for the NOAA NBM (National Blend of Models) GRIB2 public archive.
 
-Requires an hour-level date (YYYYMMDDHH) for efficient access, since files are organized
+Requires an hour-level date (YYYYMMDDhh) for efficient access, since files are organized
 by forecast cycle hour. If only a day is given, all 24 hours will be iterated.
 
 # Regions
@@ -631,7 +663,7 @@ files = discover_files(source, "2025010100")  # 00Z cycle
 function NBMSource(; region::String = "co", file_pattern::Regex = r"\.grib2$")
     S3BucketSource(
         bucket = "noaa-nbm-grib2-pds",
-        prefix_template = "blend.{YYYYmmdd}/{HH}/core/",
+        prefix_template = "blend.{YYYYMMDD}/{hh}/core/",
         extras = Dict("region" => region),
         file_pattern = file_pattern,
     )
@@ -665,7 +697,7 @@ function MRMSSource(; region::String = "CONUS",
                       file_pattern::Regex = r"\.grib2\.gz$")
     S3BucketSource(
         bucket = "noaa-mrms-pds",
-        prefix_template = "{region}/{product}/{YYYYmmdd}/",
+        prefix_template = "{region}/{product}/{YYYYMMDD}/",
         extras = Dict("region" => region, "product" => product),
         file_pattern = file_pattern,
     )
@@ -678,9 +710,10 @@ end
 
 Data source for HTTP directory listings.
 
-URL supports date placeholders: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`, and —
-when an hour/minute-level date string is supplied — `{HH}` and `{mm}`
-(see [`substitute_date_placeholders`](@ref)).
+URL supports date placeholders: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYMMDD}`, and —
+when an hour/minute-level date string is supplied — `{hh}` and `{mm}`
+(see [`substitute_date_placeholders`](@ref), which also accepts the legacy
+spellings `{YYYYmmdd}` and `{HH}`).
 
 # Fields
 - `base_url::String`: URL template with optional date placeholders

@@ -27,8 +27,8 @@ end
 
 Move each archived step's products out of the working tree and into
 `base_archive_dir`. Every product is filed by the timestamp in its own filename
-(gridded products are `gridded_<kind>_<YYYYmmdd_HHMMSS>.nc`, CfRadial files
-`cfrad.YYYYmmdd_HHMMSS...`), so an hour- or minute-resolution archive layout
+(gridded products are `gridded_<kind>_<YYYYMMDD_hhmmss>.nc`, CfRadial files
+`cfrad.YYYYMMDD_hhmmss...`), so an hour- or minute-resolution archive layout
 splits a chunk that spans a unit boundary across the directories its products
 belong to. `start_time` (the chunk start) is the fallback for a name with no
 recognizable timestamp.
@@ -41,7 +41,7 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date;
 
     processed_files = String[]
     # The stable archive root never contains a placeholder, so this can never
-    # create a literal "{YYYYmmdd}" directory; the dated per-step directories
+    # create a literal "{YYYYMMDD}" directory; the dated per-step directories
     # are made below, once per distinct destination.
     mkpath(archive_root_dir(workflow))
 
@@ -192,7 +192,7 @@ end
 
 True if **any** archive step already has an output product for the scan at
 `scan_start` on `date`. Gridded products embed the scan time as
-`..._<YYYYmmdd_HHMMSS>...` (see `grid_output_name`), so a file in an archive
+`..._<YYYYMMDD_hhmmss>...` (see `grid_output_name`), so a file in an archive
 step's dir whose name contains that timestamp marks that scan as archived. The
 step directory is resolved from `scan_start`, so an hour- or minute-resolution
 `base_archive_dir` is searched at the unit the scan belongs to.
@@ -224,20 +224,20 @@ Extract a datetime from common meteorological data filename patterns:
 - NEXRAD: `KEVX20181010_142033_V06` → 2018-10-10T14:20:33
 - MRMS:   `MRMS_..._20201014-210000.grib2.gz` → 2020-10-14T21:00:00
 - CfRadial: `cfrad.20181010_142033...` → 2018-10-10T14:20:33
-- Generic: any `YYYYmmdd_HHMMSS` or `YYYYmmdd-HHMMSS` pattern in the filename
+- Generic: any `YYYYMMDD_hhmmss` or `YYYYMMDD-hhmmss` pattern in the filename
 """
 function _parse_filename_time(filename::String)
-    # Try NEXRAD pattern: 4-letter station + YYYYmmdd_HHMMSS
+    # Try NEXRAD pattern: 4-letter station + YYYYMMDD_hhmmss
     m = match(r"[A-Z]{4}(\d{8})_(\d{6})", filename)
     if m !== nothing
         return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")
     end
-    # Try MRMS/generic pattern: YYYYmmdd-HHMMSS
+    # Try MRMS/generic pattern: YYYYMMDD-hhmmss
     m = match(r"(\d{8})-(\d{6})", filename)
     if m !== nothing
         return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")
     end
-    # Try CfRadial/generic pattern: YYYYmmdd_HHMMSS
+    # Try CfRadial/generic pattern: YYYYMMDD_hhmmss
     m = match(r"(\d{8})_(\d{6})", filename)
     if m !== nothing
         return DateTime(m.captures[1] * m.captures[2], dateformat"YYYYmmddHHMMSS")

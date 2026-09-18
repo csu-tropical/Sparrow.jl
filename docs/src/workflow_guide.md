@@ -94,6 +94,21 @@ The order in the vector determines execution order. Each step receives output fr
 
 ## Implementing Step Functions
 
+!!! warning "Julia Dates uses a different letter convention"
+    Sparrow's documentation and placeholder tokens use ISO 8601 notation:
+    uppercase letters for the date fields (`YYYY`, `MM`, `DD`) and lowercase for
+    the time fields (`hh`, `mm`, `ss`). Julia's `Dates.format`/`DateFormat`
+    strings do **not**: there `m` is the month, `M` the minute, `H` the hour and
+    `S` the second. So a `YYYYMMDD_hhmmss` timestamp is produced in Julia with
+
+    ```julia
+    Dates.format(t, "YYYYmmdd_HHMMSS")
+    ```
+
+    When you write a custom step that names files or parses times, use Julia's
+    letters in the code and never copy the documentation notation into a format
+    string — `"YYYYMMDD_hhmmss"` would give you minutes where you wanted months.
+
 ### Function Signature
 
 Step functions must follow this signature:
@@ -205,7 +220,7 @@ workflow = MyWorkflow(
     
     # Directories
     base_plot_dir = "/plots",      # Output plots directory
-    date_subdir = true,            # Append a YYYYmmdd level to the base directories
+    date_subdir = true,            # Append a YYYYMMDD level to the base directories
                                    #   (default true; see "Customizing the date directory")
     
     # Radar-specific
@@ -253,7 +268,7 @@ end
 
 ### Directory Hierarchy
 
-With the default layout, every tree carries a `YYYYmmdd` date level. For a
+With the default layout, every tree carries a `YYYYMMDD` date level. For a
 workflow with the steps `convert`, `qc` and `grid` processing 1 January 2024:
 
 ```
@@ -298,32 +313,36 @@ anywhere in the path — above a platform directory, for instance.
 | `{YYYY}`          | day    | `2024`           | data, archive, plot                             |
 | `{MM}`            | day    | `01`             | data, archive, plot                             |
 | `{DD}`            | day    | `01`             | data, archive, plot                             |
-| `{YYYYmmdd}`      | day    | `20240101`       | data, archive, plot                             |
-| `{HH}`            | hour   | `13`             | data, archive, plot                             |
-| `{YYYYmmdd_HH}`   | hour   | `20240101_13`    | data, archive, plot                             |
+| `{YYYYMMDD}`      | day    | `20240101`       | data, archive, plot                             |
+| `{hh}`            | hour   | `13`             | data, archive, plot                             |
+| `{YYYYMMDD_hh}`   | hour   | `20240101_13`    | data, archive, plot                             |
 | `{mm}`            | minute | `05`             | data, archive, plot                             |
-| `{YYYYmmdd_HHMM}` | minute | `20240101_1305`  | data, archive, plot                             |
+| `{YYYYMMDD_hhmm}` | minute | `20240101_1305`  | data, archive, plot                             |
 | `{step}`          | —      | the step name    | archive, plot only                              |
 
-`{MM}` is the month and `{mm}` the minute, as in the remote sources'
-`prefix_template`. Without a `{step}` token the step name is appended after the
-resolved base, which is the historical layout; with one it goes exactly where
-you put it. `{step}` in `base_data_dir` is an error — raw input has no step.
+Tokens follow ISO 8601 notation: uppercase letters name the date fields and
+lowercase the time fields, so `{MM}` is the month and `{mm}` the minute, as in
+the remote sources' `prefix_template`. The earlier spellings `{YYYYmmdd}` and
+`{HH}` are still accepted as aliases of `{YYYYMMDD}` and `{hh}`, so existing
+`prefix_template` and `base_url` settings keep working. Without a `{step}` token
+the step name is appended after the resolved base, which is the historical
+layout; with one it goes exactly where you put it. `{step}` in `base_data_dir`
+is an error — raw input has no step.
 
 | Parameter value | Resolved directory for 2024-01-01 13:05 |
 | --- | --- |
 | `base_archive_dir = "/archive"` | `/archive/<step>/20240101/` |
-| `base_archive_dir = "/archive/{YYYYmmdd}/chivo"` | `/archive/20240101/chivo/<step>/` |
+| `base_archive_dir = "/archive/{YYYYMMDD}/chivo"` | `/archive/20240101/chivo/<step>/` |
 | `base_archive_dir = "/archive/{YYYY}/{MM}/{DD}"` | `/archive/2024/01/01/<step>/` |
-| `base_archive_dir = "/archive/{step}/{YYYYmmdd}/{HH}"` | `/archive/grid/20240101/13/` |
-| `base_plot_dir = "/figs/{YYYYmmdd_HH}"` | `/figs/20240101_13/<step>/` |
-| `base_data_dir = "/data/{YYYYmmdd}/{HH}{mm}"` | `/data/20240101/1305/` |
+| `base_archive_dir = "/archive/{step}/{YYYYMMDD}/{hh}"` | `/archive/grid/20240101/13/` |
+| `base_plot_dir = "/figs/{YYYYMMDD_hh}"` | `/figs/20240101_13/<step>/` |
+| `base_data_dir = "/data/{YYYYMMDD}/{hh}{mm}"` | `/data/20240101/1305/` |
 | `base_data_dir = "/data/chivo"` with `date_subdir = false` | `/data/chivo/` (read directly) |
 
-An unrecognized token — `{yyyy}`, `{YYYYMMDD}`, `{date}` — is rejected at
+An unrecognized token — `{yyyy}`, `{YYYYMMDDhh}`, `{date}` — is rejected at
 startup with the list of valid placeholders, rather than creating a directory
 with that literal name. So is a `base_archive_dir` whose *first* component is a
-placeholder (`"/{YYYYmmdd}/archive"`): the archive tree needs one literal root,
+placeholder (`"/{YYYYMMDD}/archive"`): the archive tree needs one literal root,
 see the `.sparrow` markers below.
 
 #### The directory unit is independent of `span_seconds`
@@ -335,12 +354,12 @@ That unit has **no effect on processing granularity**: a chunk is always
 
 - **Reading.** A chunk reads *every* unit directory its window overlaps. A
   10-minute chunk running 13:55–14:05 against `base_data_dir =
-  "/data/{YYYYmmdd}/{HH}"` reads both `/data/20240101/13/` and
+  "/data/{YYYYMMDD}/{hh}"` reads both `/data/20240101/13/` and
   `/data/20240101/14/`, so a rapid-scan volume that spans the top of the hour
   arrives whole. Missing unit directories are skipped quietly; only a window
   with no existing directory at all warns.
 - **Writing.** Each product is filed by the timestamp in its *own* filename
-  (`gridded_<kind>_<YYYYmmdd_HHMMSS>.nc`, `cfrad.YYYYmmdd_HHMMSS...`), with the
+  (`gridded_<kind>_<YYYYMMDD_hhmmss>.nc`, `cfrad.YYYYMMDD_hhmmss...`), with the
   chunk start as the fallback for an unrecognizable name. So the 13:55–14:05
   chunk above writes its 13:5x products into `.../20240101/13/` and its 14:0x
   products into `.../20240101/14/`. Figures follow the same rule per input file.
@@ -364,7 +383,7 @@ workflow = MyWorkflow(
 
 With `date_subdir = false` the input directory is read flat, so Sparrow selects
 a window's files by the timestamps embedded in the filenames
-(`cfrad.YYYYmmdd_HHMMSS...`, `KEVXYYYYmmdd_HHMMSS...`, `...YYYYmmdd-HHMMSS...`).
+(`cfrad.YYYYMMDD_hhmmss...`, `KEVXYYYYMMDD_hhmmss...`, `...YYYYMMDD-hhmmss...`).
 Files whose names carry no recognizable timestamp are offered to every window
 and filtered by their scan time; they only make a day count as "having data"
 when nothing in the directory has a parseable name. `date_subdir` is ignored for
@@ -379,10 +398,10 @@ removed, or `base_archive_dir` itself when it has none.
 | `base_archive_dir` | Marker directory |
 | --- | --- |
 | `/archive/chivo` | `/archive/chivo/.sparrow/` |
-| `/archive/{YYYYmmdd}/chivo` | `/archive/chivo/.sparrow/` |
-| `/archive/{YYYYmmdd}/seapol` | `/archive/seapol/.sparrow/` |
+| `/archive/{YYYYMMDD}/chivo` | `/archive/chivo/.sparrow/` |
+| `/archive/{YYYYMMDD}/seapol` | `/archive/seapol/.sparrow/` |
 | `/archive/chivo/{YYYY}/{MM}` | `/archive/chivo/.sparrow/` |
-| `/archive/{step}/{YYYYmmdd}/{HH}` | `/archive/.sparrow/` |
+| `/archive/{step}/{YYYYMMDD}/{hh}` | `/archive/.sparrow/` |
 
 There is one marker directory per archive tree, so a marker written by one chunk
 stays findable by the next whatever unit the products below it are organized by,
@@ -397,14 +416,14 @@ in, plus any earlier one that the last `span_seconds` still reaches into: at day
 resolution that is today, and yesterday as well for one span after midnight; at
 hour or minute resolution it is the current unit plus the previous one when
 within a span of the boundary. Unit directories that do not exist yet are
-skipped quietly. Only the default `base_data_dir/YYYYmmdd` (or flat) layout has
+skipped quietly. Only the default `base_data_dir/YYYYMMDD` (or flat) layout has
 its current directory created for it; a placeholder layout is left to the data
 writer, so the poller never litters an hourly or per-minute tree with empty
 directories.
 
 Two things are deliberately unaffected:
 
-- **The working tree.** `base_working_dir/<random>/<step>/YYYYmmdd/` is fixed;
+- **The working tree.** `base_working_dir/<random>/<step>/YYYYMMDD/` is fixed;
   it is scratch space that is deleted after each chunk, and some steps (notably
   `RadxConvertStep`) rely on its date level.
 - **Remote data sources.** `S3BucketSource` and `HTTPDirSource` lay out their

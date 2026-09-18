@@ -124,11 +124,16 @@ substituted in place, and no extra date directory level is appended.
 | `{YYYY}`          | day    | `2024`           |
 | `{MM}`            | day    | `01`             |
 | `{DD}`            | day    | `01`             |
-| `{YYYYmmdd}`      | day    | `20240101`       |
-| `{HH}`            | hour   | `13`             |
-| `{YYYYmmdd_HH}`   | hour   | `20240101_13`    |
+| `{YYYYMMDD}`      | day    | `20240101`       |
+| `{hh}`            | hour   | `13`             |
+| `{YYYYMMDD_hh}`   | hour   | `20240101_13`    |
 | `{mm}`            | minute | `05`             |
-| `{YYYYmmdd_HHMM}` | minute | `20240101_1305`  |
+| `{YYYYMMDD_hhmm}` | minute | `20240101_1305`  |
+
+Tokens follow ISO 8601 notation: uppercase letters for the date fields and
+lowercase for the time fields. The [legacy spellings](@ref
+LEGACY_PLACEHOLDER_ALIASES) `{YYYYmmdd}` and `{HH}` are still accepted silently
+as aliases of `{YYYYMMDD}` and `{hh}`.
 
 The finest token present sets the directory's *time organization unit*, day,
 hour or minute (see [`placeholder_resolution`](@ref)). That unit is independent
@@ -137,8 +142,8 @@ overlap several unit directories.
 
 See [`dated_dir`](@ref) and [`substitute_date_placeholders`](@ref).
 """
-const DATE_PLACEHOLDERS = ("{YYYYmmdd_HHMM}", "{YYYYmmdd_HH}", "{YYYYmmdd}",
-                           "{YYYY}", "{MM}", "{DD}", "{HH}", "{mm}")
+const DATE_PLACEHOLDERS = ("{YYYYMMDD_hhmm}", "{YYYYMMDD_hh}", "{YYYYMMDD}",
+                           "{YYYY}", "{MM}", "{DD}", "{hh}", "{mm}")
 
 """
     STEP_PLACEHOLDER
@@ -154,17 +159,21 @@ const STEP_PLACEHOLDER = "{step}"
 Tokens of [`DATE_PLACEHOLDERS`](@ref) that resolve only to a day, an hour and a
 minute respectively. Used by [`placeholder_resolution`](@ref).
 """
-const DAY_PLACEHOLDERS = ("{YYYY}", "{MM}", "{DD}", "{YYYYmmdd}")
-const HOUR_PLACEHOLDERS = ("{HH}", "{YYYYmmdd_HH}")
-const MINUTE_PLACEHOLDERS = ("{mm}", "{YYYYmmdd_HHMM}")
+const DAY_PLACEHOLDERS = ("{YYYY}", "{MM}", "{DD}", "{YYYYMMDD}")
+const HOUR_PLACEHOLDERS = ("{hh}", "{YYYYMMDD_hh}")
+const MINUTE_PLACEHOLDERS = ("{mm}", "{YYYYMMDD_hhmm}")
 
 """
     has_date_placeholder(path) → Bool
 
-True if `path` contains one of the [`DATE_PLACEHOLDERS`](@ref). `{step}` alone
-does not count, since it carries no time information.
+True if `path` contains one of the [`DATE_PLACEHOLDERS`](@ref), or one of their
+[legacy spellings](@ref LEGACY_PLACEHOLDER_ALIASES). `{step}` alone does not
+count, since it carries no time information.
 """
-has_date_placeholder(path::AbstractString) = any(p -> occursin(p, path), DATE_PLACEHOLDERS)
+function has_date_placeholder(path::AbstractString)
+    canonical = _canonical_placeholders(path)
+    return any(p -> occursin(p, canonical), DATE_PLACEHOLDERS)
+end
 
 """
     has_step_placeholder(path) → Bool
@@ -177,15 +186,17 @@ has_step_placeholder(path::AbstractString) = occursin(STEP_PLACEHOLDER, path)
     validate_date_placeholders(path, param_name; allow_step=false) → path
 
 Check that every `{...}` token in `path` is one of the
-[`DATE_PLACEHOLDERS`](@ref), plus [`STEP_PLACEHOLDER`](@ref) when `allow_step`
-is set. Called from [`setup_workflow_params`](@ref) so a typo such as `{yyyy}`,
-or a `{step}` in `base_data_dir`, fails at startup rather than silently creating
-a literal directory of that name.
+[`DATE_PLACEHOLDERS`](@ref) or their
+[legacy spellings](@ref LEGACY_PLACEHOLDER_ALIASES), plus
+[`STEP_PLACEHOLDER`](@ref) when `allow_step` is set. Called from
+[`setup_workflow_params`](@ref) so a typo such as `{yyyy}`, or a `{step}` in
+`base_data_dir`, fails at startup rather than silently creating a literal
+directory of that name.
 """
 function validate_date_placeholders(path::AbstractString, param_name::AbstractString;
                                     allow_step::Bool = false)
     allowed = allow_step ? (DATE_PLACEHOLDERS..., STEP_PLACEHOLDER) : DATE_PLACEHOLDERS
-    for m in eachmatch(r"\{[^}]*\}", path)
+    for m in eachmatch(r"\{[^}]*\}", _canonical_placeholders(path))
         token = String(m.match)
         if !(token in allowed)
             hint = (!allow_step && token == STEP_PLACEHOLDER) ?
@@ -205,16 +216,17 @@ The time organization unit of a base directory: the finest
 `:hour`, `:day`, or `:none` when the template carries no date placeholder at all.
 
 ```julia
-placeholder_resolution("/data/{YYYYmmdd}")        # :day
-placeholder_resolution("/data/{YYYYmmdd}/{HH}")   # :hour
-placeholder_resolution("/data/{YYYYmmdd_HHMM}")   # :minute
+placeholder_resolution("/data/{YYYYMMDD}")        # :day
+placeholder_resolution("/data/{YYYYMMDD}/{hh}")   # :hour
+placeholder_resolution("/data/{YYYYMMDD_hhmm}")   # :minute
 placeholder_resolution("/data/chivo")             # :none
 ```
 """
 function placeholder_resolution(template::AbstractString)
-    any(p -> occursin(p, template), MINUTE_PLACEHOLDERS) && return :minute
-    any(p -> occursin(p, template), HOUR_PLACEHOLDERS) && return :hour
-    any(p -> occursin(p, template), DAY_PLACEHOLDERS) && return :day
+    canonical = _canonical_placeholders(template)
+    any(p -> occursin(p, canonical), MINUTE_PLACEHOLDERS) && return :minute
+    any(p -> occursin(p, canonical), HOUR_PLACEHOLDERS) && return :hour
+    any(p -> occursin(p, canonical), DAY_PLACEHOLDERS) && return :day
     return :none
 end
 
@@ -245,7 +257,7 @@ end
 """
     use_date_subdir(workflow) → Bool
 
-Whether the output layout appends a `YYYYmmdd` directory level to base
+Whether the output layout appends a `YYYYMMDD` directory level to base
 directories that contain no date placeholder. Set by the optional workflow
 parameter `date_subdir` (default `true`).
 """
@@ -255,13 +267,13 @@ function use_date_subdir(workflow::SparrowWorkflow)
     return value
 end
 
-# The appended `YYYYmmdd` directory level is always day-resolution.
+# The appended `YYYYMMDD` directory level is always day-resolution.
 _date_string(date::AbstractString) = String(date)
 _date_string(date::DateTime) = Dates.format(date, "YYYYmmdd")
 _date_string(date::Date) = Dates.format(date, "YYYYmmdd")
 
-# Placeholder substitution uses the full time so {HH}/{mm} resolve. A date given
-# as a string shorter than YYYYmmddHHMM names the start of its window, so the
+# Placeholder substitution uses the full time so {hh}/{mm} resolve. A date given
+# as a string shorter than YYYYMMDDhhmm names the start of its window, so the
 # missing hour/minute fields are zero.
 _placeholder_date_string(date::DateTime) = Dates.format(date, "YYYYmmddHHMM")
 _placeholder_date_string(date::Date) = Dates.format(date, "YYYYmmdd") * "0000"
@@ -281,7 +293,7 @@ Resolve a base directory for `date` (a `DateTime`, or a date string of 8, 10 or
 - `base` contains a [date placeholder](@ref DATE_PLACEHOLDERS) → substitute it
   and append nothing, so the date can sit at any level of the path and the
   directory unit can be day, hour or minute.
-- otherwise, `date_subdir = true` → `base/YYYYmmdd` (the default layout).
+- otherwise, `date_subdir = true` → `base/YYYYMMDD` (the default layout).
 - otherwise, `date_subdir = false` → `base` itself, a flat directory.
 """
 function dated_dir(base::AbstractString, date, date_subdir::Bool)
@@ -296,7 +308,7 @@ end
 Per-step variant of [`dated_dir`](@ref), used for the archive and plot trees.
 A [`{step}`](@ref STEP_PLACEHOLDER) token in `base` is replaced by the step name
 wherever it sits; without one the step name is appended after the resolved base:
-`base/<step>/YYYYmmdd` by default, `<substituted base>/<step>` when `base`
+`base/<step>/YYYYMMDD` by default, `<substituted base>/<step>` when `base`
 carries a date placeholder, and `base/<step>` when `date_subdir = false`.
 """
 function step_dated_dir(base::AbstractString, step_name, date, date_subdir::Bool)
@@ -333,10 +345,10 @@ the first one, so two trees that differ only below a placeholder keep distinct
 roots and do not share processed-file markers.
 
 ```julia
-stable_root("/archive/{YYYYmmdd}/chivo", "base_archive_dir")       # "/archive/chivo"
-stable_root("/archive/{YYYYmmdd}/seapol", "base_archive_dir")      # "/archive/seapol"
+stable_root("/archive/{YYYYMMDD}/chivo", "base_archive_dir")       # "/archive/chivo"
+stable_root("/archive/{YYYYMMDD}/seapol", "base_archive_dir")      # "/archive/seapol"
 stable_root("/archive/chivo/{YYYY}/{MM}", "base_archive_dir")      # "/archive/chivo"
-stable_root("/archive/{step}/{YYYYmmdd}/{HH}", "base_archive_dir") # "/archive"
+stable_root("/archive/{step}/{YYYYMMDD}/{hh}", "base_archive_dir") # "/archive"
 ```
 
 Errors if the first component is itself a placeholder, since the tree (and its
@@ -350,7 +362,7 @@ function stable_root(base::AbstractString, param_name::AbstractString)
     if first_literal === nothing || occursin('{', parts[first_literal])
         msg_error("$param_name = \"$path\" starts with a placeholder. The first " *
                   "directory level must be a literal path, so the processed-file " *
-                  "markers have a stable root; write e.g. \"/archive/{YYYYmmdd}\".")
+                  "markers have a stable root; write e.g. \"/archive/{YYYYMMDD}\".")
     end
     kept = filter(part -> !occursin('{', part), parts)
     return joinpath(kept...)
@@ -549,7 +561,7 @@ end
 Human-readable list of the `datetime` formats accepted by
 [`parse_datetime_string`](@ref), used in error messages.
 """
-const DATETIME_FORMATS = "YYYY, YYYYmm, YYYYmmdd, YYYYmmdd_HH, YYYYmmdd_HHMM, YYYYmmdd_HHMMSS"
+const DATETIME_FORMATS = "YYYY, YYYYMM, YYYYMMDD, YYYYMMDD_hh, YYYYMMDD_hhmm, YYYYMMDD_hhmmss"
 
 """
     parse_datetime_string(s) → (DateTime, Symbol)
@@ -560,11 +572,11 @@ naming its precision. Exactly six formats are accepted:
 | String            | Length | Kind      | DateTime returned      |
 |-------------------|--------|-----------|------------------------|
 | `YYYY`            | 4      | `:year`   | midnight, Jan 1        |
-| `YYYYmm`          | 6      | `:month`  | midnight, 1st of month |
-| `YYYYmmdd`        | 8      | `:day`    | midnight that day      |
-| `YYYYmmdd_HH`     | 11     | `:hour`   | top of that hour       |
-| `YYYYmmdd_HHMM`   | 13     | `:minute` | that minute            |
-| `YYYYmmdd_HHMMSS` | 15     | `:second` | that second            |
+| `YYYYMM`          | 6      | `:month`  | midnight, 1st of month |
+| `YYYYMMDD`        | 8      | `:day`    | midnight that day      |
+| `YYYYMMDD_hh`     | 11     | `:hour`   | top of that hour       |
+| `YYYYMMDD_hhmm`   | 13     | `:minute` | that minute            |
+| `YYYYMMDD_hhmmss` | 15     | `:second` | that second            |
 
 The returned `DateTime` is always the *start* of the window the string names; it
 is never aligned or truncated to a `span_seconds` boundary. How much data each
@@ -684,7 +696,7 @@ end
     set_window_datetime(workflow::SparrowWorkflow) → String
 
 Set `workflow["datetime"]` to the start of the workflow's `start_time`/`stop_time`
-window, formatted as `YYYYmmdd_HHMMSS`, and log the window.
+window, formatted as `YYYYMMDD_hhmmss`, and log the window.
 
 The `datetime` parameter is kept in sync so log and directory names stay
 sensible, but [`process_workflow`](@ref) always prefers the explicit window.
@@ -919,7 +931,7 @@ The processing period is resolved from the first of these that is present:
 
 Realtime mode accepts none of these and errors if any is supplied. When a
 start/stop window is active, `workflow["datetime"]` is set to the start of the
-window formatted as `YYYYmmdd_HHMMSS` so log names stay sensible, but
+window formatted as `YYYYMMDD_hhmmss` so log names stay sensible, but
 [`process_workflow`](@ref) processes the whole window.
 
 # See Also
@@ -1070,13 +1082,13 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
         stable_root(workflow.params["base_archive_dir"], "base_archive_dir")
     end
     # The working tree layout is fixed, so placeholders there would only ever
-    # produce a literal "{YYYYmmdd}" directory.
+    # produce a literal "{YYYYMMDD}" directory.
     if haskey(workflow.params, "base_working_dir") &&
        workflow.params["base_working_dir"] isa AbstractString &&
        occursin(r"\{[^}]*\}", workflow.params["base_working_dir"])
         msg_error("Date placeholders are not supported in base_working_dir " *
                   "(got \"$(workflow.params["base_working_dir"])\"); the working tree " *
-                  "is always laid out as base_working_dir/<random>/<step>/YYYYmmdd.")
+                  "is always laid out as base_working_dir/<random>/<step>/YYYYMMDD.")
     end
     use_date_subdir(workflow)
 
@@ -1312,7 +1324,7 @@ function assign_workers(workflow::SparrowWorkflow)
                     # yesterday for one span after midnight; at hour or minute
                     # resolution the current unit plus the previous one near the
                     # boundary. Unit directories that do not exist yet are skipped
-                    # quietly, and only the default base/YYYYmmdd (or flat) layout
+                    # quietly, and only the default base/YYYYMMDD (or flat) layout
                     # has its directory created, as before; placeholder layouts are
                     # left to the data writer so no empty hour/minute dirs are made.
                     if !has_date_placeholder(source.base_dir)
@@ -1424,11 +1436,11 @@ to a `span_seconds` boundary. Its length selects how much is processed:
 | `datetime`        | Window processed                                        |
 |-------------------|---------------------------------------------------------|
 | `YYYY`            | the whole year, chunked by `span_seconds`               |
-| `YYYYmm`          | the whole month, chunked by `span_seconds`              |
-| `YYYYmmdd`        | that whole day, chunked by `span_seconds`               |
-| `YYYYmmdd_HH`     | that whole hour, chunked by `span_seconds`              |
-| `YYYYmmdd_HHMM`   | one window, `[that minute, that minute + span_seconds)` |
-| `YYYYmmdd_HHMMSS` | one window, `[that second, that second + span_seconds)` |
+| `YYYYMM`          | the whole month, chunked by `span_seconds`              |
+| `YYYYMMDD`        | that whole day, chunked by `span_seconds`               |
+| `YYYYMMDD_hh`     | that whole hour, chunked by `span_seconds`              |
+| `YYYYMMDD_hhmm`   | one window, `[that minute, that minute + span_seconds)` |
+| `YYYYMMDD_hhmmss` | one window, `[that second, that second + span_seconds)` |
 
 Any other length raises an error listing the accepted formats.
 
@@ -1569,7 +1581,7 @@ function process_workflow(workflow::SparrowWorkflow)
     else
         datetime = get_param(workflow, "datetime", "now")
 
-        # Change "now" to the current datetime in the format YYYYmmdd_HHMMSS
+        # Change "now" to the current datetime in the format YYYYMMDD_hhmmss
         if datetime == "now"
             datetime = Dates.format(now(UTC), "YYYYmmdd_HHMMSS")
         end
@@ -1583,13 +1595,13 @@ function process_workflow(workflow::SparrowWorkflow)
             flush(stdout)
             process_day_range(base_datetime, 0:(num_days - 1))
         elseif kind === :month
-            # Process a whole month (YYYYmm)
+            # Process a whole month (YYYYMM)
             num_days = Dates.value(base_datetime + Dates.Month(1) - base_datetime) ÷ (1000 * 60 * 60 * 24)
             msg_info("Processing month $(Dates.format(base_datetime, "YYYY-mm")) ($num_days days)...")
             flush(stdout)
             process_day_range(base_datetime, 0:(num_days - 1))
         elseif kind === :day
-            # Process one day (YYYYmmdd)
+            # Process one day (YYYYMMDD)
             msg_info("Processing one day...")
             flush(stdout)
             if !has_data(source, Dates.format(base_datetime, "YYYYmmdd"))
@@ -1599,7 +1611,7 @@ function process_workflow(workflow::SparrowWorkflow)
             end
             process_day_chunks(base_datetime)
         elseif kind === :hour
-            # Process one hour (YYYYmmdd_HH)
+            # Process one hour (YYYYMMDD_hh)
             day_dt = DateTime(Dates.Date(base_datetime))
             msg_info("Processing one hour...")
             if !has_data(source, Dates.format(day_dt, "YYYYmmdd"))
@@ -1612,7 +1624,7 @@ function process_workflow(workflow::SparrowWorkflow)
                               hour_offset=Dates.hour(base_datetime), num_seconds=3600)
         else
             # Process a single window starting at the given minute or second
-            # (YYYYmmdd_HHMM or YYYYmmdd_HHMMSS)
+            # (YYYYMMDD_hhmm or YYYYMMDD_hhmmss)
             process_chunk(base_datetime, base_datetime + Dates.Second(span_seconds))
         end
     end

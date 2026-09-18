@@ -39,8 +39,8 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{RadxConvertStep}, input
     msg_info("Converting data to CfRadial...")
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
-    # RadxConvert appends the YYYYmmdd itself, so hand it the parent of the
-    # working step directory (`temp_dir/<step>/YYYYmmdd`). The working tree is
+    # RadxConvert appends the YYYYMMDD itself, so hand it the parent of the
+    # working step directory (`temp_dir/<step>/YYYYMMDD`). The working tree is
     # always date-organized regardless of the archive/plot `date_subdir` setting.
     radx_output_dir = dirname(output_dir)
     for file in input_files

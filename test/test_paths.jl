@@ -29,7 +29,7 @@ end
 @testset "substitute_date_placeholders" begin
 
     @testset "day-level date fills the date tokens" begin
-        @test Sparrow.substitute_date_placeholders("/archive/{YYYYmmdd}/chivo", "20240101") ==
+        @test Sparrow.substitute_date_placeholders("/archive/{YYYYMMDD}/chivo", "20240101") ==
               "/archive/20240101/chivo"
         @test Sparrow.substitute_date_placeholders("/archive/{YYYY}/{MM}/{DD}", "20240101") ==
               "/archive/2024/01/01"
@@ -39,12 +39,12 @@ end
     end
 
     @testset "hour and minute tokens need a longer date string" begin
-        # A day-level date leaves {HH}/{mm} alone
-        @test Sparrow.substitute_date_placeholders("blend.{YYYYmmdd}/{HH}/core/", "20240101") ==
-              "blend.20240101/{HH}/core/"
-        @test Sparrow.substitute_date_placeholders("blend.{YYYYmmdd}/{HH}/core/", "2024010106") ==
+        # A day-level date leaves {hh}/{mm} alone
+        @test Sparrow.substitute_date_placeholders("blend.{YYYYMMDD}/{hh}/core/", "20240101") ==
+              "blend.20240101/{hh}/core/"
+        @test Sparrow.substitute_date_placeholders("blend.{YYYYMMDD}/{hh}/core/", "2024010106") ==
               "blend.20240101/06/core/"
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd}_{HH}{mm}", "202401010615") ==
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD}_{hh}{mm}", "202401010615") ==
               "20240101_0615"
         # Too short to resolve anything
         @test Sparrow.substitute_date_placeholders("{YYYY}/{MM}", "2024") == "{YYYY}/{MM}"
@@ -54,9 +54,9 @@ end
         @test Sparrow.substitute_date_placeholders("/archive/{YYYY}/{MM}/{DD}",
                                                    DateTime(2024, 3, 5, 6, 7, 8)) ==
               "/archive/2024/03/05"
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd}_{HH}{mm}",
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD}_{hh}{mm}",
                                                    DateTime(2024, 3, 5, 6, 7)) == "20240305_0607"
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd}", Date(2024, 3, 5)) == "20240305"
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD}", Date(2024, 3, 5)) == "20240305"
     end
 
     @testset "the remote sources resolve through the shared helper" begin
@@ -67,37 +67,59 @@ end
         http = HTTPDirSource(base_url="https://example.com/{YYYY}/{MM}/{DD}/")
         @test Sparrow._http_resolve_url(http, "20240101") == "https://example.com/2024/01/01/"
     end
+
+    @testset "the legacy spellings resolve exactly like the canonical tokens" begin
+        for (legacy, canonical) in (("/archive/{YYYYmmdd}/chivo", "/archive/{YYYYMMDD}/chivo"),
+                                    ("blend.{YYYYmmdd}/{HH}/core/", "blend.{YYYYMMDD}/{hh}/core/"),
+                                    ("/data/{YYYYmmdd}/{HH}{mm}", "/data/{YYYYMMDD}/{hh}{mm}"))
+            for date in ("20240101", "2024010106", "202401010615")
+                @test Sparrow.substitute_date_placeholders(legacy, date) ==
+                      Sparrow.substitute_date_placeholders(canonical, date)
+            end
+        end
+        # Unresolved tokens come back in canonical spelling
+        @test Sparrow.substitute_date_placeholders("blend.{YYYYmmdd}/{HH}/core/", "20240101") ==
+              "blend.20240101/{hh}/core/"
+    end
 end
 
 @testset "has_date_placeholder and validate_date_placeholders" begin
 
-    @test Sparrow.has_date_placeholder("/archive/{YYYYmmdd}/chivo")
+    @test Sparrow.has_date_placeholder("/archive/{YYYYMMDD}/chivo")
     @test Sparrow.has_date_placeholder("/archive/{YYYY}/{MM}/{DD}")
     @test !Sparrow.has_date_placeholder("/archive/chivo")
     # Hour and minute tokens organize the tree just as the day tokens do
-    @test Sparrow.has_date_placeholder("/archive/{YYYYmmdd}/{HH}")
-    @test Sparrow.has_date_placeholder("/archive/{YYYYmmdd_HHMM}")
+    @test Sparrow.has_date_placeholder("/archive/{YYYYMMDD}/{hh}")
+    @test Sparrow.has_date_placeholder("/archive/{YYYYMMDD_hhmm}")
     # {step} carries no time information
     @test !Sparrow.has_date_placeholder("/archive/{step}")
-    @test Sparrow.has_step_placeholder("/archive/{step}/{YYYYmmdd}")
-    @test !Sparrow.has_step_placeholder("/archive/{YYYYmmdd}")
+    @test Sparrow.has_step_placeholder("/archive/{step}/{YYYYMMDD}")
+    @test !Sparrow.has_step_placeholder("/archive/{YYYYMMDD}")
 
     @test Sparrow.validate_date_placeholders("/archive/{YYYY}/{MM}/{DD}", "base_archive_dir") ==
           "/archive/{YYYY}/{MM}/{DD}"
     @test Sparrow.validate_date_placeholders("/archive/chivo", "base_archive_dir") == "/archive/chivo"
 
-    @test Sparrow.validate_date_placeholders("/archive/{YYYYmmdd}/{HH}", "base_archive_dir") ==
-          "/archive/{YYYYmmdd}/{HH}"
-    @test Sparrow.validate_date_placeholders("/archive/{YYYYmmdd_HHMM}", "base_plot_dir") ==
-          "/archive/{YYYYmmdd_HHMM}"
+    @test Sparrow.validate_date_placeholders("/archive/{YYYYMMDD}/{hh}", "base_archive_dir") ==
+          "/archive/{YYYYMMDD}/{hh}"
+    @test Sparrow.validate_date_placeholders("/archive/{YYYYMMDD_hhmm}", "base_plot_dir") ==
+          "/archive/{YYYYMMDD_hhmm}"
 
-    for bad in ["/archive/{yyyy}", "/archive/{date}", "/archive/{YYYYMMDD}", "/archive/{hh}"]
+    for bad in ["/archive/{yyyy}", "/archive/{date}", "/archive/{YYYYMMDDhh}", "/archive/{ss}"]
         @test_throws ErrorException Sparrow.validate_date_placeholders(bad, "base_archive_dir")
     end
 
+    # The legacy spellings are accepted for good, and read as their canonical form
+    @test Sparrow.has_date_placeholder("/archive/{YYYYmmdd}/chivo")
+    @test Sparrow.has_date_placeholder("/archive/{YYYYmmdd}/{HH}")
+    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd}") === :day
+    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd}/{HH}") === :hour
+    @test Sparrow.validate_date_placeholders("/archive/{YYYYmmdd}/{HH}", "base_archive_dir") ==
+          "/archive/{YYYYmmdd}/{HH}"
+
     # {step} is only valid where a step directory exists
-    @test Sparrow.validate_date_placeholders("/archive/{step}/{YYYYmmdd}", "base_archive_dir";
-                                             allow_step=true) == "/archive/{step}/{YYYYmmdd}"
+    @test Sparrow.validate_date_placeholders("/archive/{step}/{YYYYMMDD}", "base_archive_dir";
+                                             allow_step=true) == "/archive/{step}/{YYYYMMDD}"
     @test_throws ErrorException Sparrow.validate_date_placeholders("/data/{step}", "base_data_dir")
 
     # The message names the offending token and lists the valid ones
@@ -110,12 +132,16 @@ end
     @test err isa ErrorException
     @test occursin("{date}", err.msg)
     @test occursin("base_archive_dir", err.msg)
-    @test occursin("{YYYYmmdd}", err.msg)
+    @test occursin("{YYYYMMDD}", err.msg)
+    # Only the canonical spellings are listed, never the legacy aliases
+    @test occursin("{hh}", err.msg)
+    @test !occursin("{HH}", err.msg)
+    @test !occursin("{YYYYmmdd}", err.msg)
 end
 
 @testset "dated_dir and step_dated_dir" begin
 
-    @testset "default layout appends YYYYmmdd" begin
+    @testset "default layout appends YYYYMMDD" begin
         @test Sparrow.dated_dir("/data", "20240101", true) == joinpath("/data", "20240101")
         @test Sparrow.step_dated_dir("/archive", "grid", "20240101", true) ==
               joinpath("/archive", "grid", "20240101")
@@ -128,14 +154,14 @@ end
     end
 
     @testset "a placeholder puts the date where the user asked for it" begin
-        @test Sparrow.dated_dir("/data/{YYYYmmdd}/chivo", "20240101", true) ==
+        @test Sparrow.dated_dir("/data/{YYYYMMDD}/chivo", "20240101", true) ==
               "/data/20240101/chivo"
-        @test Sparrow.step_dated_dir("/archive/{YYYYmmdd}/chivo", "grid", "20240101", true) ==
+        @test Sparrow.step_dated_dir("/archive/{YYYYMMDD}/chivo", "grid", "20240101", true) ==
               joinpath("/archive/20240101/chivo", "grid")
         @test Sparrow.step_dated_dir("/archive/{YYYY}/{MM}/{DD}", "grid", "20240101", true) ==
               joinpath("/archive/2024/01/01", "grid")
         # date_subdir is ignored once a placeholder is present
-        @test Sparrow.step_dated_dir("/archive/{YYYYmmdd}/chivo", "grid", "20240101", false) ==
+        @test Sparrow.step_dated_dir("/archive/{YYYYMMDD}/chivo", "grid", "20240101", false) ==
               joinpath("/archive/20240101/chivo", "grid")
     end
 
@@ -177,8 +203,8 @@ end
     end
 
     @testset "placeholders put the date above the step" begin
-        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYmmdd}/chivo",
-                              base_archive_dir = "/archive/{YYYYmmdd}/chivo",
+        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYMMDD}/chivo",
+                              base_archive_dir = "/archive/{YYYYMMDD}/chivo",
                               base_plot_dir = "/figs/{YYYY}/{MM}/{DD}")
         @test Sparrow.data_dir(wf, "20240101") == "/data/20240101/chivo"
         # The marker root keeps every literal component, dropping the placeholders
@@ -337,26 +363,26 @@ end
 @testset "setup_workflow_params validates the directory layout" begin
 
     @testset "valid placeholders and date_subdir pass" begin
-        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYmmdd}/chivo",
+        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYMMDD}/chivo",
                               base_archive_dir = "/archive/{YYYY}/{MM}/{DD}",
                               base_plot_dir = "/figs",
                               date_subdir = false)
         Sparrow.setup_workflow_params(wf, _path_parsed_args())
-        @test wf["base_data_dir"] == "/data/{YYYYmmdd}/chivo"
+        @test wf["base_data_dir"] == "/data/{YYYYMMDD}/chivo"
         @test Sparrow.data_dir(wf, "20240101") == "/data/20240101/chivo"
     end
 
     @testset "an unknown token fails at startup" begin
         for (key, value) in (("base_data_dir", "/data/{yyyy}"),
                              ("base_archive_dir", "/archive/{date}/chivo"),
-                             ("base_plot_dir", "/figs/{YYYYMMDD}"))
+                             ("base_plot_dir", "/figs/{YYYYMMDDhh}"))
             wf = PathTestWorkflow(; Symbol(key) => value)
             @test_throws ErrorException Sparrow.setup_workflow_params(wf, _path_parsed_args())
         end
     end
 
     @testset "placeholders in base_working_dir fail at startup" begin
-        wf = PathTestWorkflow(base_data_dir = "/data", base_working_dir = "/work/{YYYYmmdd}")
+        wf = PathTestWorkflow(base_data_dir = "/data", base_working_dir = "/work/{YYYYMMDD}")
         @test_throws ErrorException Sparrow.setup_workflow_params(wf, _path_parsed_args())
     end
 
@@ -369,33 +395,33 @@ end
 @testset "hour and minute placeholders" begin
 
     @testset "substitution of the hour, minute and combined tokens" begin
-        @test Sparrow.substitute_date_placeholders("/data/{YYYYmmdd}/{HH}", "2024010113") ==
+        @test Sparrow.substitute_date_placeholders("/data/{YYYYMMDD}/{hh}", "2024010113") ==
               "/data/20240101/13"
-        @test Sparrow.substitute_date_placeholders("/data/{YYYYmmdd}/{HH}{mm}", "202401011305") ==
+        @test Sparrow.substitute_date_placeholders("/data/{YYYYMMDD}/{hh}{mm}", "202401011305") ==
               "/data/20240101/1305"
-        @test Sparrow.substitute_date_placeholders("/data/{YYYYmmdd_HH}", "2024010113") ==
+        @test Sparrow.substitute_date_placeholders("/data/{YYYYMMDD_hh}", "2024010113") ==
               "/data/20240101_13"
-        @test Sparrow.substitute_date_placeholders("/data/{YYYYmmdd_HHMM}", "202401011305") ==
+        @test Sparrow.substitute_date_placeholders("/data/{YYYYMMDD_hhmm}", "202401011305") ==
               "/data/20240101_1305"
-        # The combined tokens are not clobbered by the shorter {YYYYmmdd}
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd}/{YYYYmmdd_HH}/{YYYYmmdd_HHMM}",
+        # The combined tokens are not clobbered by the shorter {YYYYMMDD}
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD}/{YYYYMMDD_hh}/{YYYYMMDD_hhmm}",
                                                    "202401011305") ==
               "20240101/20240101_13/20240101_1305"
         # A day-level date cannot resolve the combined tokens, and leaves them alone
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd_HH}", "20240101") == "{YYYYmmdd_HH}"
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd_HHMM}", "2024010113") ==
-              "{YYYYmmdd_HHMM}"
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD_hh}", "20240101") == "{YYYYMMDD_hh}"
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD_hhmm}", "2024010113") ==
+              "{YYYYMMDD_hhmm}"
         # A DateTime resolves everything
-        @test Sparrow.substitute_date_placeholders("{YYYYmmdd_HHMM}", DateTime(2024, 1, 1, 13, 5)) ==
+        @test Sparrow.substitute_date_placeholders("{YYYYMMDD_hhmm}", DateTime(2024, 1, 1, 13, 5)) ==
               "20240101_1305"
     end
 
     @testset "{step} substitution" begin
-        @test Sparrow.step_dated_dir("/archive/{step}/{YYYYmmdd}/{HH}", "grid",
+        @test Sparrow.step_dated_dir("/archive/{step}/{YYYYMMDD}/{hh}", "grid",
                                      DateTime(2024, 1, 1, 13, 5), true) ==
               "/archive/grid/20240101/13"
         # Without {step} the step name is appended after the resolved base
-        @test Sparrow.step_dated_dir("/archive/{YYYYmmdd}/{HH}", "grid",
+        @test Sparrow.step_dated_dir("/archive/{YYYYMMDD}/{hh}", "grid",
                                      DateTime(2024, 1, 1, 13, 5), true) ==
               joinpath("/archive/20240101/13", "grid")
         # {step} without any date placeholder still honours date_subdir
@@ -407,13 +433,13 @@ end
 
     @testset "dated_dir resolves the full time" begin
         t = DateTime(2024, 1, 1, 13, 5, 30)
-        @test Sparrow.dated_dir("/data/{YYYYmmdd}/{HH}", t, true) == "/data/20240101/13"
-        @test Sparrow.dated_dir("/data/{YYYYmmdd_HHMM}", t, true) == "/data/20240101_1305"
+        @test Sparrow.dated_dir("/data/{YYYYMMDD}/{hh}", t, true) == "/data/20240101/13"
+        @test Sparrow.dated_dir("/data/{YYYYMMDD_hhmm}", t, true) == "/data/20240101_1305"
         # A day string means midnight, so the hour and minute are zero
-        @test Sparrow.dated_dir("/data/{YYYYmmdd}/{HH}{mm}", "20240101", true) ==
+        @test Sparrow.dated_dir("/data/{YYYYMMDD}/{hh}{mm}", "20240101", true) ==
               "/data/20240101/0000"
         # An hour string leaves the minute at zero
-        @test Sparrow.dated_dir("/data/{YYYYmmdd}/{HH}{mm}", "2024010113", true) ==
+        @test Sparrow.dated_dir("/data/{YYYYMMDD}/{hh}{mm}", "2024010113", true) ==
               "/data/20240101/1300"
     end
 end
@@ -422,12 +448,12 @@ end
 
     @test Sparrow.placeholder_resolution("/data/chivo") === :none
     @test Sparrow.placeholder_resolution("/data/{step}") === :none
-    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd}") === :day
+    @test Sparrow.placeholder_resolution("/data/{YYYYMMDD}") === :day
     @test Sparrow.placeholder_resolution("/data/{YYYY}/{MM}/{DD}") === :day
-    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd}/{HH}") === :hour
-    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd_HH}") === :hour
-    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd}/{HH}{mm}") === :minute
-    @test Sparrow.placeholder_resolution("/data/{YYYYmmdd_HHMM}") === :minute
+    @test Sparrow.placeholder_resolution("/data/{YYYYMMDD}/{hh}") === :hour
+    @test Sparrow.placeholder_resolution("/data/{YYYYMMDD_hh}") === :hour
+    @test Sparrow.placeholder_resolution("/data/{YYYYMMDD}/{hh}{mm}") === :minute
+    @test Sparrow.placeholder_resolution("/data/{YYYYMMDD_hhmm}") === :minute
 
     @test Sparrow.unit_period(:day) == Dates.Day(1)
     @test Sparrow.unit_period(:hour) == Dates.Hour(1)
@@ -442,22 +468,22 @@ end
 
     @test Sparrow.source_resolution(LocalDirSource("/data")) === :day
     @test Sparrow.source_resolution(LocalDirSource("/data"; date_subdir=false)) === :none
-    @test Sparrow.source_resolution(LocalDirSource("/data/{YYYYmmdd}/{HH}")) === :hour
+    @test Sparrow.source_resolution(LocalDirSource("/data/{YYYYMMDD}/{hh}")) === :hour
     # A placeholder wins over date_subdir
-    @test Sparrow.source_resolution(LocalDirSource("/data/{YYYYmmdd_HHMM}"; date_subdir=false)) ===
+    @test Sparrow.source_resolution(LocalDirSource("/data/{YYYYMMDD_hhmm}"; date_subdir=false)) ===
           :minute
 end
 
 @testset "unit_dirs over a processing window" begin
 
     @testset "a window inside one unit yields one directory" begin
-        hourly = LocalDirSource("/data/{YYYYmmdd}/{HH}")
+        hourly = LocalDirSource("/data/{YYYYMMDD}/{hh}")
         @test Sparrow.unit_dirs(hourly, DateTime(2024, 1, 1, 13, 5),
                                 DateTime(2024, 1, 1, 13, 15)) == ["/data/20240101/13"]
     end
 
     @testset "a window crossing a boundary yields every directory it touches" begin
-        hourly = LocalDirSource("/data/{YYYYmmdd}/{HH}")
+        hourly = LocalDirSource("/data/{YYYYMMDD}/{hh}")
         @test Sparrow.unit_dirs(hourly, DateTime(2024, 1, 1, 13, 55),
                                 DateTime(2024, 1, 1, 14, 5)) ==
               ["/data/20240101/13", "/data/20240101/14"]
@@ -467,7 +493,7 @@ end
                                 DateTime(2024, 1, 2, 0, 5)) ==
               [joinpath("/data", "20240101"), joinpath("/data", "20240102")]
 
-        minutely = LocalDirSource("/data/{YYYYmmdd_HHMM}")
+        minutely = LocalDirSource("/data/{YYYYMMDD_hhmm}")
         @test Sparrow.unit_dirs(minutely, DateTime(2024, 1, 1, 13, 5, 30),
                                 DateTime(2024, 1, 1, 13, 8)) ==
               ["/data/20240101_1305", "/data/20240101_1306",
@@ -481,7 +507,7 @@ end
     end
 
     @testset "an empty window still names its own directory" begin
-        hourly = LocalDirSource("/data/{YYYYmmdd}/{HH}")
+        hourly = LocalDirSource("/data/{YYYYMMDD}/{hh}")
         t = DateTime(2024, 1, 1, 13, 5)
         @test Sparrow.unit_dirs(hourly, t, t) == ["/data/20240101/13"]
     end
@@ -500,7 +526,7 @@ end
 
 @testset "LocalDirSource with hour and minute layouts" begin
 
-    @testset "{YYYYmmdd}/{HH} layout" begin
+    @testset "{YYYYMMDD}/{hh} layout" begin
         tmp = mktempdir()
         mkpath(joinpath(tmp, "20240101", "13"))
         mkpath(joinpath(tmp, "20240101", "14"))
@@ -508,7 +534,7 @@ end
         _touch_cfrad(joinpath(tmp, "20240101", "13"), "20240101_135500")
         _touch_cfrad(joinpath(tmp, "20240101", "14"), "20240101_140500")
 
-        source = LocalDirSource(joinpath(tmp, "{YYYYmmdd}", "{HH}"))
+        source = LocalDirSource(joinpath(tmp, "{YYYYMMDD}", "{hh}"))
         @test Sparrow.source_resolution(source) === :hour
 
         # An 8-digit date is the whole day: every hour directory is read
@@ -539,7 +565,28 @@ end
         rm(tmp, recursive=true)
     end
 
-    @testset "{YYYYmmdd_HHMM} layout" begin
+    @testset "a legacy-spelled layout behaves like the canonical one" begin
+        tmp = mktempdir()
+        mkpath(joinpath(tmp, "20240101", "13"))
+        _touch_cfrad(joinpath(tmp, "20240101", "13"), "20240101_130500")
+
+        legacy = LocalDirSource(joinpath(tmp, "{YYYYmmdd}", "{HH}"))
+        canonical = LocalDirSource(joinpath(tmp, "{YYYYMMDD}", "{hh}"))
+        @test Sparrow.source_resolution(legacy) === :hour
+        @test Sparrow._local_dir(legacy, DateTime(2024, 1, 1, 13, 5)) ==
+              Sparrow._local_dir(canonical, DateTime(2024, 1, 1, 13, 5))
+        # The coarse day prefix is cut at the hour token whichever spelling is used
+        @test Sparrow._coarse_prefix(legacy, DateTime(2024, 1, 1, 13, 5)) ==
+              Sparrow._coarse_prefix(canonical, DateTime(2024, 1, 1, 13, 5)) ==
+              joinpath(tmp, "20240101")
+        @test discover_files(legacy, "2024010113") == discover_files(canonical, "2024010113")
+        @test has_data(legacy, "20240101") == true
+        @test has_data(legacy, "20240102") == false
+
+        rm(tmp, recursive=true)
+    end
+
+    @testset "{YYYYMMDD_hhmm} layout" begin
         tmp = mktempdir()
         for stamp in ("20240101_1305", "20240101_1306")
             mkpath(joinpath(tmp, stamp))
@@ -547,7 +594,7 @@ end
         _touch_cfrad(joinpath(tmp, "20240101_1305"), "20240101_130510")
         _touch_cfrad(joinpath(tmp, "20240101_1306"), "20240101_130610")
 
-        source = LocalDirSource(joinpath(tmp, "{YYYYmmdd_HHMM}"))
+        source = LocalDirSource(joinpath(tmp, "{YYYYMMDD_hhmm}"))
         @test Sparrow.source_resolution(source) === :minute
         @test Sparrow._local_dir(source, DateTime(2024, 1, 1, 13, 5, 30)) ==
               joinpath(tmp, "20240101_1305")
@@ -597,25 +644,25 @@ end
 @testset "archive_root_dir keeps a stable root" begin
 
     @test Sparrow.stable_root("/archive/chivo", "base_archive_dir") == "/archive/chivo"
-    @test Sparrow.stable_root("/archive/{YYYYmmdd}/chivo", "base_archive_dir") ==
+    @test Sparrow.stable_root("/archive/{YYYYMMDD}/chivo", "base_archive_dir") ==
           joinpath("/archive", "chivo")
     # Two trees that differ only below a placeholder keep distinct marker roots
-    @test Sparrow.stable_root("/archive/{YYYYmmdd}/seapol", "base_archive_dir") ==
+    @test Sparrow.stable_root("/archive/{YYYYMMDD}/seapol", "base_archive_dir") ==
           joinpath("/archive", "seapol")
     @test Sparrow.stable_root("/archive/chivo/{YYYY}/{MM}", "base_archive_dir") ==
           joinpath("/archive", "chivo")
-    @test Sparrow.stable_root("/archive/{step}/{YYYYmmdd}/{HH}", "base_archive_dir") == "/archive"
-    @test Sparrow.stable_root("/archive/{YYYYmmdd}/{HH}/grid", "base_archive_dir") ==
+    @test Sparrow.stable_root("/archive/{step}/{YYYYMMDD}/{hh}", "base_archive_dir") == "/archive"
+    @test Sparrow.stable_root("/archive/{YYYYMMDD}/{hh}/grid", "base_archive_dir") ==
           joinpath("/archive", "grid")
     # A relative path works the same way
-    @test Sparrow.stable_root("archive/{YYYYmmdd}", "base_archive_dir") == "archive"
+    @test Sparrow.stable_root("archive/{YYYYMMDD}", "base_archive_dir") == "archive"
     # There must be a literal directory to anchor the markers to
-    @test_throws ErrorException Sparrow.stable_root("/{YYYYmmdd}/archive", "base_archive_dir")
+    @test_throws ErrorException Sparrow.stable_root("/{YYYYMMDD}/archive", "base_archive_dir")
     @test_throws ErrorException Sparrow.stable_root("{step}/archive", "base_archive_dir")
 
     for (base, root) in (("/archive", "/archive"),
-                         ("/archive/{YYYYmmdd}/chivo", joinpath("/archive", "chivo")),
-                         ("/archive/{step}/{YYYYmmdd}/{HH}", "/archive"))
+                         ("/archive/{YYYYMMDD}/chivo", joinpath("/archive", "chivo")),
+                         ("/archive/{step}/{YYYYMMDD}/{hh}", "/archive"))
         wf = PathTestWorkflow(base_archive_dir = base)
         @test Sparrow.archive_root_dir(wf) == root
     end
@@ -623,7 +670,7 @@ end
 
 @testset "plot_output_dir_for_file" begin
 
-    wf = PathTestWorkflow(base_plot_dir = "/figs/{YYYYmmdd}/{HH}")
+    wf = PathTestWorkflow(base_plot_dir = "/figs/{YYYYMMDD}/{hh}")
     start_time = DateTime(2024, 1, 1, 13, 0)
 
     # The file's own timestamp decides the hour, even across a chunk boundary
@@ -658,7 +705,7 @@ end
         touch(joinpath(step_dir, "gridded_ppi_20240101_140500.nc"))
 
         archive_base = joinpath(tmp, "archive")
-        wf = PathTestWorkflow(base_archive_dir = joinpath(archive_base, "{step}", "{YYYYmmdd}", "{HH}"),
+        wf = PathTestWorkflow(base_archive_dir = joinpath(archive_base, "{step}", "{YYYYMMDD}", "{hh}"),
                               steps = [("grid", PassThroughStep, "base_data", true)],
                               force_reprocess = true)
         archived = Sparrow.archive_workflow(wf, joinpath(tmp, "work"), date;
@@ -672,7 +719,7 @@ end
         rm(tmp, recursive=true)
     end
 
-    @testset "the default layout still lands in <archive>/<step>/YYYYmmdd" begin
+    @testset "the default layout still lands in <archive>/<step>/YYYYMMDD" begin
         tmp = mktempdir()
         date = "20240101"
         step_dir = joinpath(tmp, "work", "grid", date)
@@ -700,7 +747,7 @@ end
         touch(joinpath(step_dir, "summary.txt"))
 
         archive_base = joinpath(tmp, "archive")
-        wf = PathTestWorkflow(base_archive_dir = joinpath(archive_base, "{YYYYmmdd}", "{HH}"),
+        wf = PathTestWorkflow(base_archive_dir = joinpath(archive_base, "{YYYYMMDD}", "{hh}"),
                               steps = [("grid", PassThroughStep, "base_data", true)],
                               force_reprocess = true)
         Sparrow.archive_workflow(wf, joinpath(tmp, "work"), date;
@@ -714,9 +761,9 @@ end
 @testset "setup_workflow_params validates the generalized layout" begin
 
     @testset "hour and minute layouts pass" begin
-        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYmmdd}/{HH}{mm}",
-                              base_archive_dir = "/archive/{step}/{YYYYmmdd}/{HH}",
-                              base_plot_dir = "/figs/{YYYYmmdd_HH}")
+        wf = PathTestWorkflow(base_data_dir = "/data/{YYYYMMDD}/{hh}{mm}",
+                              base_archive_dir = "/archive/{step}/{YYYYMMDD}/{hh}",
+                              base_plot_dir = "/figs/{YYYYMMDD_hh}")
         Sparrow.setup_workflow_params(wf, _path_parsed_args())
         @test Sparrow.data_dir(wf, DateTime(2024, 1, 1, 13, 5)) == "/data/20240101/1305"
         @test Sparrow.archive_step_dir(wf, "grid", DateTime(2024, 1, 1, 13, 5)) ==
@@ -726,13 +773,13 @@ end
     end
 
     @testset "{step} in base_data_dir fails at startup" begin
-        wf = PathTestWorkflow(base_data_dir = "/data/{step}/{YYYYmmdd}")
+        wf = PathTestWorkflow(base_data_dir = "/data/{step}/{YYYYMMDD}")
         @test_throws ErrorException Sparrow.setup_workflow_params(wf, _path_parsed_args())
     end
 
     @testset "a leading placeholder in base_archive_dir fails at startup" begin
         wf = PathTestWorkflow(base_data_dir = "/data",
-                              base_archive_dir = "/{YYYYmmdd}/archive")
+                              base_archive_dir = "/{YYYYMMDD}/archive")
         @test_throws ErrorException Sparrow.setup_workflow_params(wf, _path_parsed_args())
     end
 end

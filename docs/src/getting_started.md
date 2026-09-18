@@ -72,7 +72,7 @@ workflow = SimpleWorkflow(
 ### Step 2: Run It
 
 Point `base_data_dir` at a directory of radar files and run the workflow for a
-day you have data. By default Sparrow expects the files in a `YYYYmmdd/`
+day you have data. By default Sparrow expects the files in a `YYYYMMDD/`
 subdirectory of `base_data_dir` (`/path/to/your/radar/files/20240101/`); if your
 files sit directly in that directory, add `date_subdir = false` to the workflow:
 
@@ -296,7 +296,7 @@ Every workflow must have these parameters:
 
 - `base_working_dir`: Temporary working directory for intermediate files
 - `base_archive_dir`: Directory for archived/processed files
-- `base_data_dir`: Directory containing raw input data, read from a `YYYYmmdd/`
+- `base_data_dir`: Directory containing raw input data, read from a `YYYYMMDD/`
   subdirectory unless `date_subdir = false` or the path contains a date or time
   placeholder
 - `steps`: Vector of tuples: `(step_name, step_type, input_directory, archive)`
@@ -304,12 +304,12 @@ Every workflow must have these parameters:
 ### Common Optional Parameters
 
 - `base_plot_dir`: Directory for output plots
-- `date_subdir`: Append a `YYYYmmdd` directory level to `base_data_dir`,
+- `date_subdir`: Append a `YYYYMMDD` directory level to `base_data_dir`,
   `base_archive_dir` and `base_plot_dir` (default: `true`). Set to `false` for a
   flat layout. Those three directories also accept placeholders that put the
-  time anywhere in the path and take precedence over `date_subdir`: `{YYYYmmdd}`,
-  `{YYYY}`, `{MM}` and `{DD}` for a daily directory, `{HH}` or `{YYYYmmdd_HH}`
-  for an hourly one, `{mm}` or `{YYYYmmdd_HHMM}` for a per-minute one, plus
+  time anywhere in the path and take precedence over `date_subdir`: `{YYYYMMDD}`,
+  `{YYYY}`, `{MM}` and `{DD}` for a daily directory, `{hh}` or `{YYYYMMDD_hh}`
+  for an hourly one, `{mm}` or `{YYYYMMDD_hhmm}` for a per-minute one, plus
   `{step}` in the archive and plot directories. The directory unit is
   independent of `span_seconds` — see
   [Customizing the date directory](@ref).
