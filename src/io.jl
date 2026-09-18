@@ -22,18 +22,30 @@ function initialize_working_dirs(workflow::SparrowWorkflow, date;
     return temp_dir
 end
 
-function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
+"""
+    archive_workflow(workflow, temp_dir, date; start_time=DateTime(1970)) → Vector{String}
+
+Move each archived step's products out of the working tree and into
+`base_archive_dir`. Every product is filed by the timestamp in its own filename
+(gridded products are `gridded_<kind>_<YYYYmmdd_HHMMSS>.nc`, CfRadial files
+`cfrad.YYYYmmdd_HHMMSS...`), so an hour- or minute-resolution archive layout
+splits a chunk that spans a unit boundary across the directories its products
+belong to. `start_time` (the chunk start) is the fallback for a name with no
+recognizable timestamp.
+"""
+function archive_workflow(workflow::SparrowWorkflow, temp_dir, date;
+                          start_time::DateTime=DateTime(1970))
 
     msg_info("Archiving the processed data...")
     flush(stdout)
 
     processed_files = String[]
-    # Resolve any date placeholder in base_archive_dir so a literal "{YYYYmmdd}"
-    # directory is never created; the per-step directories are made below.
-    archive_dir = archive_root_dir(workflow, date)
+    # The stable archive root never contains a placeholder, so this can never
+    # create a literal "{YYYYmmdd}" directory; the dated per-step directories
+    # are made below, once per distinct destination.
+    mkpath(archive_root_dir(workflow))
 
-    # Make sure the archive directory exists
-    mkpath(archive_dir)
+    fallback_time = start_time > DateTime(1970) ? start_time : first(_date_window(_date_string(date)))
 
     force = workflow["force_reprocess"]
     for (step_name, step_type, input_name, archive) in workflow["steps"]
@@ -42,10 +54,18 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
             step_files = readdir(step_dir; join=true)
             filter!(!isdir,step_files)
             append!(processed_files, step_files)
-            step_archive_dir = archive_step_dir(workflow, step_name, date)
-            mkpath(step_archive_dir)
-            msg_debug("Archiving $(step_files) to $(step_archive_dir)...")
-            archive_files(step_files, step_archive_dir, force)
+            # Group by destination so each directory is created and moved into once
+            groups = Dict{String,Vector{String}}()
+            for file in step_files
+                file_time = something(_parse_filename_time(basename(file)), fallback_time)
+                dest = archive_step_dir(workflow, step_name, file_time)
+                push!(get!(groups, dest, String[]), file)
+            end
+            for (step_archive_dir, files) in groups
+                mkpath(step_archive_dir)
+                msg_debug("Archiving $(files) to $(step_archive_dir)...")
+                archive_files(files, step_archive_dir, force)
+            end
         end
     end
 
@@ -55,7 +75,9 @@ end
 function link_base_data(date, workflow, raw_working_dir;
                         start_time::DateTime=DateTime(1970), stop_time::DateTime=DateTime(2100))
 
-    base_archive_dir = archive_root_dir(workflow, date)
+    # The processed-file markers live at the stable archive root, which does not
+    # depend on the date or the directory unit.
+    base_archive_dir = archive_root_dir(workflow)
     force_reprocess = workflow["force_reprocess"]
     # When set, a missing .sparrow marker is reconciled against existing archived
     # products (see `archived_output_exists`): if every archive step already has
@@ -68,8 +90,11 @@ function link_base_data(date, workflow, raw_working_dir;
     if is_remote(source)
         # Remote source: discover files, filter by time window, download into
         # base_data_dir as a local cache, then symlink into the working directory
-        cache_dir = data_dir(workflow, date)
-        mkpath(cache_dir)
+        # The remote source owns its own layout, so discovery stays day-based;
+        # only the local cache follows base_data_dir's unit directories.
+        cache_fallback_time = start_time > DateTime(1970) ? start_time :
+                              first(_date_window(_date_string(date)))
+        made_cache_dirs = Set{String}()
         remote_files = discover_files(source, date)
         # Filter by time window to avoid downloading the entire day
         if start_time > DateTime(1970) && stop_time < DateTime(2100)
@@ -85,12 +110,20 @@ function link_base_data(date, workflow, raw_working_dir;
                 elseif reconcile
                     # File not downloaded yet; key reconcile off the filename time.
                     scan_start = _parse_filename_time(fname)
-                    if scan_start !== nothing && archived_output_exists(workflow, scan_start, date)
+                    if scan_start !== nothing && archived_output_exists(workflow, scan_start)
                         mark_processed(workflow, [fname], base_archive_dir)
                         msg_info("Reconciled $fname: products already archived, marking processed and skipping")
                         continue
                     end
                 end
+            end
+            # Cache each file under the unit directory its own time belongs to,
+            # so the cache mirrors the layout a local source would have.
+            file_time = something(_parse_filename_time(fname), cache_fallback_time)
+            cache_dir = data_dir(workflow, file_time)
+            if !(cache_dir in made_cache_dirs)
+                mkpath(cache_dir)
+                push!(made_cache_dirs, cache_dir)
             end
             cached_file = joinpath(cache_dir, fname)
             if !isfile(cached_file)
@@ -110,14 +143,23 @@ function link_base_data(date, workflow, raw_working_dir;
             end
         end
     else
-        # Local source: symlink files
-        src_data_dir = _local_dir(source, date)
-        if !isdir(src_data_dir)
-            msg_warning("Local data directory $src_data_dir does not exist")
+        # Local source: read every unit directory the chunk overlaps, so a chunk
+        # spanning a directory boundary (a rapid-scan volume crossing the top of
+        # the hour, say) still sees all of its files.
+        if start_time > DateTime(1970) && stop_time < DateTime(2100)
+            window_start, window_stop = start_time, stop_time
+        else
+            window_start, window_stop = _date_window(_date_string(date))
+        end
+        data_files, found_dir = _list_unit_files(source, window_start, window_stop)
+        if !found_dir
+            src_data_dirs = unit_dirs(source, window_start, window_stop)
+            listed = length(src_data_dirs) == 1 ? first(src_data_dirs) :
+                     "$(first(src_data_dirs)) ... $(last(src_data_dirs)) " *
+                     "($(length(src_data_dirs)) directories)"
+            msg_warning("Local data directory $listed does not exist")
             return
         end
-        data_files = readdir(src_data_dir; join=true)
-        filter!(!isdir, data_files)
         # Filter by time window so chunked runs only see their own files
         if start_time > DateTime(1970) && stop_time < DateTime(2100)
             data_files = _filter_files_by_time(data_files, start_time, stop_time)
@@ -129,7 +171,7 @@ function link_base_data(date, workflow, raw_working_dir;
                     continue
                 elseif reconcile
                     scan_start = get_scan_start(file)
-                    if scan_start > DateTime(1970) && archived_output_exists(workflow, scan_start, date)
+                    if scan_start > DateTime(1970) && archived_output_exists(workflow, scan_start)
                         mark_processed(workflow, [file], base_archive_dir)
                         msg_info("Reconciled $(basename(file)): products already archived, marking processed and skipping")
                         continue
@@ -137,18 +179,23 @@ function link_base_data(date, workflow, raw_working_dir;
                 end
             end
             link = joinpath(raw_working_dir, basename(file))
-            symlink(file, link)
+            # Two unit directories could hold the same basename; keep the first
+            if !islink(link) && !isfile(link)
+                symlink(file, link)
+            end
         end
     end
 end
 
 """
-    archived_output_exists(workflow, scan_start::DateTime, date) -> Bool
+    archived_output_exists(workflow, scan_start::DateTime) -> Bool
 
 True if **any** archive step already has an output product for the scan at
 `scan_start` on `date`. Gridded products embed the scan time as
 `..._<YYYYmmdd_HHMMSS>...` (see `grid_output_name`), so a file in an archive
-step's dir whose name contains that timestamp marks that scan as archived.
+step's dir whose name contains that timestamp marks that scan as archived. The
+step directory is resolved from `scan_start`, so an hour- or minute-resolution
+`base_archive_dir` is searched at the unit the scan belongs to.
 
 "Any" rather than "all" because a single scan only produces a subset of the
 configured archive products (a PPI scan yields ppi/composite/volume/latlon but
@@ -159,11 +206,11 @@ of any product for a scan reliably means that scan's chunk finished. (The only
 gap is a crash *during* the archive move itself, a narrow window; force-reprocess
 a suspect date if needed.) Returns false if no archive step has matching output.
 """
-function archived_output_exists(workflow::SparrowWorkflow, scan_start::DateTime, date)
+function archived_output_exists(workflow::SparrowWorkflow, scan_start::DateTime)
     stamp = Dates.format(scan_start, "YYYYmmdd_HHMMSS")
     for (step_name, step_type, input_name, archive) in workflow["steps"]
         archive || continue
-        step_dir = archive_step_dir(workflow, step_name, date)
+        step_dir = archive_step_dir(workflow, step_name, scan_start)
         isdir(step_dir) || continue
         any(f -> occursin(stamp, f), readdir(step_dir)) && return true
     end

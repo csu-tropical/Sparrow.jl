@@ -287,22 +287,68 @@ steps declared with `archive = true` have their output moved to
 
 ### Customizing the date directory
 
-The date does not have to be the deepest level. `base_data_dir`,
-`base_archive_dir` and `base_plot_dir` accept the date placeholders
-`{YYYYmmdd}`, `{YYYY}`, `{MM}` and `{DD}`. When a base directory contains any of
-them, the date is substituted **in place** and no date level is appended, so the
-date can sit anywhere in the path — above a platform directory, for instance:
+The date does not have to be the deepest level, and the directory unit does not
+have to be a day. `base_data_dir`, `base_archive_dir` and `base_plot_dir` accept
+the placeholders below. When a base directory contains any of them, the time is
+substituted **in place** and no date level is appended, so the date can sit
+anywhere in the path — above a platform directory, for instance.
 
-| Parameter value | Resolved directory for 2024-01-01 |
+| Token             | Unit   | 2024-01-01 13:05 | Allowed in                                      |
+| ----------------- | ------ | ---------------- | ----------------------------------------------- |
+| `{YYYY}`          | day    | `2024`           | data, archive, plot                             |
+| `{MM}`            | day    | `01`             | data, archive, plot                             |
+| `{DD}`            | day    | `01`             | data, archive, plot                             |
+| `{YYYYmmdd}`      | day    | `20240101`       | data, archive, plot                             |
+| `{HH}`            | hour   | `13`             | data, archive, plot                             |
+| `{YYYYmmdd_HH}`   | hour   | `20240101_13`    | data, archive, plot                             |
+| `{mm}`            | minute | `05`             | data, archive, plot                             |
+| `{YYYYmmdd_HHMM}` | minute | `20240101_1305`  | data, archive, plot                             |
+| `{step}`          | —      | the step name    | archive, plot only                              |
+
+`{MM}` is the month and `{mm}` the minute, as in the remote sources'
+`prefix_template`. Without a `{step}` token the step name is appended after the
+resolved base, which is the historical layout; with one it goes exactly where
+you put it. `{step}` in `base_data_dir` is an error — raw input has no step.
+
+| Parameter value | Resolved directory for 2024-01-01 13:05 |
 | --- | --- |
 | `base_archive_dir = "/archive"` | `/archive/<step>/20240101/` |
 | `base_archive_dir = "/archive/{YYYYmmdd}/chivo"` | `/archive/20240101/chivo/<step>/` |
 | `base_archive_dir = "/archive/{YYYY}/{MM}/{DD}"` | `/archive/2024/01/01/<step>/` |
+| `base_archive_dir = "/archive/{step}/{YYYYmmdd}/{HH}"` | `/archive/grid/20240101/13/` |
+| `base_plot_dir = "/figs/{YYYYmmdd_HH}"` | `/figs/20240101_13/<step>/` |
+| `base_data_dir = "/data/{YYYYmmdd}/{HH}{mm}"` | `/data/20240101/1305/` |
 | `base_data_dir = "/data/chivo"` with `date_subdir = false` | `/data/chivo/` (read directly) |
 
 An unrecognized token — `{yyyy}`, `{YYYYMMDD}`, `{date}` — is rejected at
 startup with the list of valid placeholders, rather than creating a directory
-with that literal name.
+with that literal name. So is a `base_archive_dir` whose *first* component is a
+placeholder (`"/{YYYYmmdd}/archive"`): the archive tree needs one literal root,
+see the `.sparrow` markers below.
+
+#### The directory unit is independent of `span_seconds`
+
+The finest token present sets the tree's time organization unit — day, hour or
+minute (minute is the finest supported; there is no second-level directory).
+That unit has **no effect on processing granularity**: a chunk is always
+`span_seconds` long, and a chunk is never split to fit a directory.
+
+- **Reading.** A chunk reads *every* unit directory its window overlaps. A
+  10-minute chunk running 13:55–14:05 against `base_data_dir =
+  "/data/{YYYYmmdd}/{HH}"` reads both `/data/20240101/13/` and
+  `/data/20240101/14/`, so a rapid-scan volume that spans the top of the hour
+  arrives whole. Missing unit directories are skipped quietly; only a window
+  with no existing directory at all warns.
+- **Writing.** Each product is filed by the timestamp in its *own* filename
+  (`gridded_<kind>_<YYYYmmdd_HHMMSS>.nc`, `cfrad.YYYYmmdd_HHMMSS...`), with the
+  chunk start as the fallback for an unrecognizable name. So the 13:55–14:05
+  chunk above writes its 13:5x products into `.../20240101/13/` and its 14:0x
+  products into `.../20240101/14/`. Figures follow the same rule per input file.
+
+Pick the unit for the volume of data you expect per directory; pick
+`span_seconds` for the analysis increment you want. They are unrelated.
+
+#### Opting out of the date level
 
 To drop the date level entirely without using placeholders, set the optional
 `date_subdir` parameter to `false`:
@@ -317,28 +363,56 @@ workflow = MyWorkflow(
 ```
 
 With `date_subdir = false` the input directory is read flat, so Sparrow selects
-a day's files by the timestamps embedded in the filenames
+a window's files by the timestamps embedded in the filenames
 (`cfrad.YYYYmmdd_HHMMSS...`, `KEVXYYYYmmdd_HHMMSS...`, `...YYYYmmdd-HHMMSS...`).
-Files whose names carry no recognizable timestamp are offered to every day and
-filtered by their scan time; they only make a day count as "having data" when
-nothing in the directory has a parseable name. `date_subdir` is ignored for any
-base directory that already contains a placeholder.
+Files whose names carry no recognizable timestamp are offered to every window
+and filtered by their scan time; they only make a day count as "having data"
+when nothing in the directory has a parseable name. `date_subdir` is ignored for
+any base directory that already contains a placeholder.
 
-The hidden `.sparrow` directory of processed-file markers lives at the resolved
-archive root, so with a date placeholder in `base_archive_dir` the markers sit
-beside each day's products (`/archive/20240101/chivo/.sparrow/`) rather than in
-one global directory.
+#### Where the processed-file markers live
+
+The hidden `.sparrow` directory of processed-file markers lives at the **stable
+root** of the archive tree: `base_archive_dir` with its placeholder components
+removed, or `base_archive_dir` itself when it has none.
+
+| `base_archive_dir` | Marker directory |
+| --- | --- |
+| `/archive/chivo` | `/archive/chivo/.sparrow/` |
+| `/archive/{YYYYmmdd}/chivo` | `/archive/chivo/.sparrow/` |
+| `/archive/{YYYYmmdd}/seapol` | `/archive/seapol/.sparrow/` |
+| `/archive/chivo/{YYYY}/{MM}` | `/archive/chivo/.sparrow/` |
+| `/archive/{step}/{YYYYmmdd}/{HH}` | `/archive/.sparrow/` |
+
+There is one marker directory per archive tree, so a marker written by one chunk
+stays findable by the next whatever unit the products below it are organized by,
+and two trees that differ only below a placeholder (`chivo` and `seapol` above)
+keep separate markers. That is why the first component of `base_archive_dir`
+may not be a placeholder.
+
+#### Realtime polling
+
+In realtime mode the poller watches the unit directory the current time falls
+in, plus any earlier one that the last `span_seconds` still reaches into: at day
+resolution that is today, and yesterday as well for one span after midnight; at
+hour or minute resolution it is the current unit plus the previous one when
+within a span of the boundary. Unit directories that do not exist yet are
+skipped quietly. Only the default `base_data_dir/YYYYmmdd` (or flat) layout has
+its current directory created for it; a placeholder layout is left to the data
+writer, so the poller never litters an hourly or per-minute tree with empty
+directories.
 
 Two things are deliberately unaffected:
 
 - **The working tree.** `base_working_dir/<random>/<step>/YYYYmmdd/` is fixed;
   it is scratch space that is deleted after each chunk, and some steps (notably
   `RadxConvertStep`) rely on its date level.
-- **Remote data sources.** `S3BucketSource` and `HTTPDirSource` already lay out
-  their remote paths with the `prefix_template`/`base_url` placeholders, which
-  additionally support `{HH}` and `{mm}`. `base_data_dir` still controls the
-  layout of the *local download cache* for those sources, and follows the same
-  rules as a local input directory.
+- **Remote data sources.** `S3BucketSource` and `HTTPDirSource` lay out their
+  remote paths with the `prefix_template`/`base_url` placeholders, and discovery
+  against them stays day-based. `base_data_dir` still controls the layout of the
+  *local download cache* for those sources, and follows the same rules as a
+  local input directory — each downloaded file is cached under the unit
+  directory its own timestamp belongs to.
 
 ### Step Input/Output
 

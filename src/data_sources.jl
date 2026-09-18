@@ -33,8 +33,8 @@ throughout the [`DataSource`](@ref) interface. The substitutions performed
 depend on how much of the date string is present:
 
 - `length(date) >= 8`: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`
-- `length(date) >= 10`: `{HH}`
-- `length(date) >= 12`: `{mm}`
+- `length(date) >= 10`: `{HH}`, `{YYYYmmdd_HH}`
+- `length(date) >= 12`: `{mm}`, `{YYYYmmdd_HHMM}`
 
 Placeholders with no available value are left untouched. A `DateTime` is
 formatted as `"YYYYmmddHHMM"` first, so every placeholder is substituted.
@@ -42,10 +42,19 @@ formatted as `"YYYYmmddHHMM"` first, so every placeholder is substituted.
 # Example
 ```julia
 substitute_date_placeholders("/archive/{YYYY}/{MM}/{DD}", "20240101")  # "/archive/2024/01/01"
+substitute_date_placeholders("/data/{YYYYmmdd_HH}", "2024010113")      # "/data/20240101_13"
 ```
 """
 function substitute_date_placeholders(template::AbstractString, date::AbstractString)
     out = String(template)
+    # The combined tokens are replaced first so their leading "{YYYYmmdd" is
+    # never consumed by the shorter tokens.
+    if length(date) >= 12
+        out = replace(out, "{YYYYmmdd_HHMM}" => date[1:8] * "_" * date[9:12])
+    end
+    if length(date) >= 10
+        out = replace(out, "{YYYYmmdd_HH}" => date[1:8] * "_" * date[9:10])
+    end
     if length(date) >= 8
         out = replace(out, "{YYYY}" => date[1:4])
         out = replace(out, "{MM}" => date[5:6])
@@ -74,13 +83,20 @@ substitute_date_placeholders(template::AbstractString, date::Date) =
 
 Data source backed by a local directory. Default and backward-compatible.
 
-The directory actually read for a given date is resolved by [`dated_dir`](@ref):
+The directory actually read for a given time is resolved by [`dated_dir`](@ref):
 
-- `base_dir` contains a date placeholder (`{YYYYmmdd}`, `{YYYY}`, `{MM}`,
-  `{DD}`) → the placeholders are substituted and nothing is appended.
+- `base_dir` contains a [date placeholder](@ref DATE_PLACEHOLDERS) → the
+  placeholders are substituted and nothing is appended. The finest token present
+  sets the directory unit: `{YYYYmmdd}` is a day, `{YYYYmmdd}/{HH}` an hour,
+  `{YYYYmmdd_HHMM}` a minute.
 - otherwise, with `date_subdir = true` (the default) → `base_dir/YYYYmmdd`.
 - otherwise, with `date_subdir = false` → `base_dir` itself, a flat directory
   holding every date's files.
+
+The `date` of the [`DataSource`](@ref) interface names a window: 8 digits are
+one day, 10 one hour and 12 one minute. `discover_files` and `has_data` read
+every unit directory that window overlaps, so `has_data(source, "20240101")`
+still answers "is there data that day" whatever the directory unit is.
 
 # Fields
 - `base_dir::String`: Base directory, optionally containing date placeholders
@@ -110,19 +126,93 @@ True when the source reads one flat directory holding every date's files
 _is_flat(source::LocalDirSource) = !has_date_placeholder(source.base_dir) && !source.date_subdir
 
 """
-    _filter_names_by_day(files, date) → Vector{String}
+    source_resolution(source::LocalDirSource) → Symbol
 
-Keep the files whose filename timestamp (see `_parse_filename_time`) falls on
-`date` (`"YYYYmmdd"`, longer strings are truncated to the day). Files whose
-names carry no recognizable timestamp are kept, since they could belong to any
-date. Used to pick one day's files out of a flat directory.
+Time organization unit of the source's directory tree: the
+[`placeholder_resolution`](@ref) of `base_dir` if it has any placeholder, else
+`:day` when `date_subdir` appends a `YYYYmmdd` level, else `:none` for a flat
+directory.
 """
-function _filter_names_by_day(files::AbstractVector{<:AbstractString}, date::AbstractString)
-    day = length(date) >= 8 ? date[1:8] : date
+function source_resolution(source::LocalDirSource)
+    resolution = placeholder_resolution(source.base_dir)
+    resolution === :none || return resolution
+    return source.date_subdir ? :day : :none
+end
+
+"""
+    unit_dirs(source::LocalDirSource, start_time, stop_time) → Vector{String}
+
+Every distinct directory of `source` that the window `[start_time, stop_time)`
+overlaps, in chronological order. A flat source has a single directory; a dated
+one is walked from `floor_to_unit(start_time, ...)` in steps of one unit.
+
+A window shorter than one unit yields one directory, and a window spanning a
+boundary yields all the directories it touches — a rapid-scan chunk crossing the
+top of the hour reads both hours rather than being split.
+"""
+function unit_dirs(source::LocalDirSource, start_time::DateTime, stop_time::DateTime)
+    resolution = source_resolution(source)
+    resolution === :none && return String[source.base_dir]
+    period = unit_period(resolution)
+    dirs = String[]
+    t = floor_to_unit(start_time, resolution)
+    while t < stop_time
+        dir = _local_dir(source, t)
+        dir in dirs || push!(dirs, dir)
+        t += period
+    end
+    # An empty or inverted window still names the directory it starts in
+    isempty(dirs) && push!(dirs, _local_dir(source, floor_to_unit(start_time, resolution)))
+    return dirs
+end
+
+"""
+    _filter_names_by_window(files, start_time, stop_time) → Vector{String}
+
+Keep the files whose filename timestamp (see [`_parse_filename_time`](@ref))
+falls in `[start_time, stop_time)`. Files whose names carry no recognizable
+timestamp are kept, since they could belong to any window. Used to pick one
+window's files out of a flat directory.
+"""
+function _filter_names_by_window(files::AbstractVector{<:AbstractString},
+                                 start_time::DateTime, stop_time::DateTime)
     return filter(files) do f
         scan_start = _parse_filename_time(basename(f))
-        scan_start === nothing || Dates.format(scan_start, "YYYYmmdd") == day
+        scan_start === nothing || (scan_start >= start_time && scan_start < stop_time)
     end
+end
+
+"""
+    _filter_names_by_day(files, date) → Vector{String}
+
+[`_filter_names_by_window`](@ref) over the whole day of `date` (`"YYYYmmdd"`,
+longer strings are truncated to the day).
+"""
+function _filter_names_by_day(files::AbstractVector{<:AbstractString}, date::AbstractString)
+    day_start = DateTime(String(date)[1:8], dateformat"YYYYmmdd")
+    return _filter_names_by_window(files, day_start, day_start + Dates.Day(1))
+end
+
+"""
+    _date_window(date) → (DateTime, DateTime)
+
+The window a [`DataSource`](@ref) `date` string names: 8 digits are one day,
+10 one hour and 12 one minute (longer strings are truncated to the minute).
+"""
+function _date_window(date::AbstractString)
+    s = String(date)
+    if length(s) >= 12
+        t = DateTime(s[1:12], dateformat"YYYYmmddHHMM")
+        return (t, t + Dates.Minute(1))
+    elseif length(s) >= 10
+        t = DateTime(s[1:10], dateformat"YYYYmmddHH")
+        return (t, t + Dates.Hour(1))
+    elseif length(s) >= 8
+        t = DateTime(s[1:8], dateformat"YYYYmmdd")
+        return (t, t + Dates.Day(1))
+    end
+    msg_error("Date string \"$date\" is too short. Expected YYYYmmdd (a day), " *
+              "YYYYmmddHH (an hour) or YYYYmmddHHMM (a minute).")
 end
 
 """
@@ -133,36 +223,122 @@ Directory this source reads for `date`, honouring date placeholders in
 """
 _local_dir(source::LocalDirSource, date) = dated_dir(source.base_dir, date, source.date_subdir)
 
-function discover_files(source::LocalDirSource, date::String)
-    dir = _local_dir(source, date)
-    isdir(dir) || return String[]
-    try
-        files = readdir(dir; join=true)
-        filter!(f -> !isdir(f) && !startswith(basename(f), "."), files)
-        # A flat directory holds every date, so select this day's files by name
-        _is_flat(source) && (files = _filter_names_by_day(files, date))
-        return reverse(files)
-    catch e
-        msg_warning("Error reading directory $dir: $e")
-        return String[]
+"""
+    _coarse_prefix(source::LocalDirSource, t::DateTime) → String
+
+The deepest directory of `source`'s tree that is fixed once the *day* of `t` is
+known: the template with only its day-level tokens substituted, cut before the
+first component that still holds an hour or minute token. For a day-level
+layout this is the day directory itself; for `/data/{YYYYmmdd}/{HH}` it is
+`/data/20240101`. Checking it first lets a day with no data at all be rejected
+with one `isdir` instead of one per hour or minute directory.
+"""
+function _coarse_prefix(source::LocalDirSource, t::DateTime)
+    _is_flat(source) && return source.base_dir
+    has_date_placeholder(source.base_dir) || return _local_dir(source, t)
+    # An 8-digit date substitutes only the day-level tokens
+    partial = substitute_date_placeholders(source.base_dir, Dates.format(t, "YYYYmmdd"))
+    occursin('{', partial) || return partial
+    kept = String[]
+    for part in splitpath(partial)
+        occursin('{', part) && break
+        push!(kept, part)
     end
+    return isempty(kept) ? partial : joinpath(kept...)
+end
+
+"""
+    _existing_unit_dirs(source::LocalDirSource, start_time, stop_time) → Vector{String}
+
+The unit directories of `source` that the window overlaps *and* exist on disk,
+in chronological order. Days whose coarse prefix is missing are skipped without
+probing their hour or minute directories. With `first_only` the walk stops at
+the first existing directory, for existence checks.
+"""
+function _existing_unit_dirs(source::LocalDirSource, start_time::DateTime, stop_time::DateTime;
+                             first_only::Bool=false)
+    dirs = String[]
+    _is_flat(source) && return isdir(source.base_dir) ? push!(dirs, source.base_dir) : dirs
+    # Walk one day at a time so a day whose tree is absent costs a single stat
+    # rather than one per hour or minute directory.
+    day = Dates.Date(start_time)
+    stop_time = max(stop_time, start_time)
+    while true
+        day_start = max(DateTime(day), start_time)
+        day_stop = min(DateTime(day) + Dates.Day(1), stop_time)
+        if isdir(_coarse_prefix(source, day_start))
+            for dir in unit_dirs(source, day_start, day_stop)
+                isdir(dir) || continue
+                push!(dirs, dir)
+                first_only && return dirs
+            end
+        end
+        day += Dates.Day(1)
+        DateTime(day) < stop_time || break
+    end
+    return dirs
+end
+
+"""
+    _list_unit_files(source::LocalDirSource, start_time, stop_time) → (Vector{String}, Bool)
+
+Regular, non-hidden files across every unit directory of `source` that the
+window `[start_time, stop_time)` overlaps, de-duplicated and in directory order,
+plus whether any of those directories existed. A flat directory is narrowed to
+the window by filename timestamp. Shared by `discover_files` and the local
+branch of `link_base_data` so the two never drift.
+"""
+function _list_unit_files(source::LocalDirSource, start_time::DateTime, stop_time::DateTime)
+    files = String[]
+    dirs = _existing_unit_dirs(source, start_time, stop_time)
+    for dir in dirs
+        try
+            entries = readdir(dir; join=true)
+            filter!(f -> !isdir(f) && !startswith(basename(f), "."), entries)
+            append!(files, entries)
+        catch e
+            msg_warning("Error reading directory $dir: $e")
+        end
+    end
+    # A flat directory holds every date, so select this window by name
+    _is_flat(source) && (files = _filter_names_by_window(files, start_time, stop_time))
+    unique!(files)
+    return files, !isempty(dirs)
+end
+
+function discover_files(source::LocalDirSource, date::String)
+    window_start, window_stop = _date_window(date)
+    files, _ = _list_unit_files(source, window_start, window_stop)
+    # Newest first, as the realtime poller and the chunked runs expect
+    return reverse(files)
 end
 
 function fetch_file(source::LocalDirSource, filename::String, dest_dir::String, date::String)
-    return joinpath(_local_dir(source, date), filename)
+    window_start, window_stop = _date_window(date)
+    # The file may live in any unit directory of the window (an hour-resolution
+    # layout queried by day, say); return the one that has it, else the window
+    # start's directory so the caller gets a sensible path for a missing file.
+    for dir in _existing_unit_dirs(source, window_start, window_stop)
+        candidate = joinpath(dir, filename)
+        isfile(candidate) && return candidate
+    end
+    return joinpath(_local_dir(source, window_start), filename)
 end
 
 is_remote(::LocalDirSource) = false
 
 function has_data(source::LocalDirSource, date::String)
-    dir = _local_dir(source, date)
+    window_start, window_stop = _date_window(date)
+    # A dated directory (placeholder or `YYYYmmdd` subdirectory) covers a known
+    # slice of time by construction, so the existence of any unit directory the
+    # window touches is the answer. A flat directory holds every date at once, so
+    # look at the filenames instead — otherwise a month or year run would think
+    # every day had data and iterate over empty chunks.
+    if !_is_flat(source)
+        return !isempty(_existing_unit_dirs(source, window_start, window_stop; first_only=true))
+    end
+    dir = source.base_dir
     isdir(dir) || return false
-    # A dated directory (placeholder or `YYYYmmdd` subdirectory) is per-day by
-    # construction, so its existence is the answer. A flat directory holds every
-    # date at once, so look at the filenames instead — otherwise a month or year
-    # run would think every day had data and iterate over empty chunks.
-    _is_flat(source) || return true
-    day = length(date) >= 8 ? date[1:8] : date
     any_parseable = false
     any_unparseable = false
     for entry in readdir(dir)
@@ -173,7 +349,7 @@ function has_data(source::LocalDirSource, date::String)
             any_unparseable = true
         else
             any_parseable = true
-            Dates.format(scan_start, "YYYYmmdd") == day && return true
+            (scan_start >= window_start && scan_start < window_stop) && return true
         end
     end
     # When the filenames carry timestamps, trust them: a stray README or similar

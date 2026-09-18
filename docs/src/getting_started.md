@@ -297,7 +297,7 @@ Every workflow must have these parameters:
 - `base_working_dir`: Temporary working directory for intermediate files
 - `base_archive_dir`: Directory for archived/processed files
 - `base_data_dir`: Directory containing raw input data, read from a `YYYYmmdd/`
-  subdirectory unless `date_subdir = false` or the path contains a date
+  subdirectory unless `date_subdir = false` or the path contains a date or time
   placeholder
 - `steps`: Vector of tuples: `(step_name, step_type, input_directory, archive)`
 
@@ -306,9 +306,12 @@ Every workflow must have these parameters:
 - `base_plot_dir`: Directory for output plots
 - `date_subdir`: Append a `YYYYmmdd` directory level to `base_data_dir`,
   `base_archive_dir` and `base_plot_dir` (default: `true`). Set to `false` for a
-  flat layout. Those three directories also accept the date placeholders
-  `{YYYYmmdd}`, `{YYYY}`, `{MM}` and `{DD}`, which put the date anywhere in the
-  path and take precedence over `date_subdir` — see
+  flat layout. Those three directories also accept placeholders that put the
+  time anywhere in the path and take precedence over `date_subdir`: `{YYYYmmdd}`,
+  `{YYYY}`, `{MM}` and `{DD}` for a daily directory, `{HH}` or `{YYYYmmdd_HH}`
+  for an hourly one, `{mm}` or `{YYYYmmdd_HHMM}` for a per-minute one, plus
+  `{step}` in the archive and plot directories. The directory unit is
+  independent of `span_seconds` — see
   [Customizing the date directory](@ref).
 - `span_seconds`: Time span for each processing chunk (default: 600 seconds). Accepts an integer number of seconds (`1200`), a string with a unit code (`"20S"`, `"5M"`, `"10H"`, `"1D"`), or a `Dates.Period` (`Minute(5)`). The legacy `minute_span` parameter still works but emits a deprecation warning.
 - `daisho_config`: Path to a Daisho TOML configuration file, required by the gridding steps. Generate a template with `using Daisho; print_config("daisho.toml")`.

@@ -115,37 +115,131 @@ end
 """
     DATE_PLACEHOLDERS
 
-Date placeholders accepted in `base_data_dir`, `base_archive_dir` and
-`base_plot_dir`. A base directory containing any of these has the date
+Date/time placeholders accepted in `base_data_dir`, `base_archive_dir` and
+`base_plot_dir`. A base directory containing any of them has the time
 substituted in place, and no extra date directory level is appended.
+
+| Token             | Unit   | 2024-01-01 13:05 |
+| ----------------- | ------ | ---------------- |
+| `{YYYY}`          | day    | `2024`           |
+| `{MM}`            | day    | `01`             |
+| `{DD}`            | day    | `01`             |
+| `{YYYYmmdd}`      | day    | `20240101`       |
+| `{HH}`            | hour   | `13`             |
+| `{YYYYmmdd_HH}`   | hour   | `20240101_13`    |
+| `{mm}`            | minute | `05`             |
+| `{YYYYmmdd_HHMM}` | minute | `20240101_1305`  |
+
+The finest token present sets the directory's *time organization unit*, day,
+hour or minute (see [`placeholder_resolution`](@ref)). That unit is independent
+of the processing granularity: a chunk is always `span_seconds` long and may
+overlap several unit directories.
 
 See [`dated_dir`](@ref) and [`substitute_date_placeholders`](@ref).
 """
-const DATE_PLACEHOLDERS = ("{YYYYmmdd}", "{YYYY}", "{MM}", "{DD}")
+const DATE_PLACEHOLDERS = ("{YYYYmmdd_HHMM}", "{YYYYmmdd_HH}", "{YYYYmmdd}",
+                           "{YYYY}", "{MM}", "{DD}", "{HH}", "{mm}")
+
+"""
+    STEP_PLACEHOLDER
+
+The `{step}` token. Valid in `base_archive_dir` and `base_plot_dir` only, where
+it marks the level at which the step name is inserted; without it the step name
+is appended after the resolved base. `base_data_dir` has no step, so `{step}`
+there is rejected at startup.
+"""
+const STEP_PLACEHOLDER = "{step}"
+
+"""
+Tokens of [`DATE_PLACEHOLDERS`](@ref) that resolve only to a day, an hour and a
+minute respectively. Used by [`placeholder_resolution`](@ref).
+"""
+const DAY_PLACEHOLDERS = ("{YYYY}", "{MM}", "{DD}", "{YYYYmmdd}")
+const HOUR_PLACEHOLDERS = ("{HH}", "{YYYYmmdd_HH}")
+const MINUTE_PLACEHOLDERS = ("{mm}", "{YYYYmmdd_HHMM}")
 
 """
     has_date_placeholder(path) → Bool
 
-True if `path` contains one of the [`DATE_PLACEHOLDERS`](@ref).
+True if `path` contains one of the [`DATE_PLACEHOLDERS`](@ref). `{step}` alone
+does not count, since it carries no time information.
 """
 has_date_placeholder(path::AbstractString) = any(p -> occursin(p, path), DATE_PLACEHOLDERS)
 
 """
-    validate_date_placeholders(path, param_name) → path
+    has_step_placeholder(path) → Bool
 
-Check that every `{...}` token in `path` is one of the [`DATE_PLACEHOLDERS`](@ref).
-Called from [`setup_workflow_params`](@ref) so a typo such as `{yyyy}` fails at
-startup rather than silently creating a literal directory of that name.
+True if `path` contains the [`STEP_PLACEHOLDER`](@ref).
 """
-function validate_date_placeholders(path::AbstractString, param_name::AbstractString)
+has_step_placeholder(path::AbstractString) = occursin(STEP_PLACEHOLDER, path)
+
+"""
+    validate_date_placeholders(path, param_name; allow_step=false) → path
+
+Check that every `{...}` token in `path` is one of the
+[`DATE_PLACEHOLDERS`](@ref), plus [`STEP_PLACEHOLDER`](@ref) when `allow_step`
+is set. Called from [`setup_workflow_params`](@ref) so a typo such as `{yyyy}`,
+or a `{step}` in `base_data_dir`, fails at startup rather than silently creating
+a literal directory of that name.
+"""
+function validate_date_placeholders(path::AbstractString, param_name::AbstractString;
+                                    allow_step::Bool = false)
+    allowed = allow_step ? (DATE_PLACEHOLDERS..., STEP_PLACEHOLDER) : DATE_PLACEHOLDERS
     for m in eachmatch(r"\{[^}]*\}", path)
         token = String(m.match)
-        if !(token in DATE_PLACEHOLDERS)
+        if !(token in allowed)
+            hint = (!allow_step && token == STEP_PLACEHOLDER) ?
+                " The {step} placeholder is only valid in base_archive_dir and base_plot_dir." : ""
             msg_error("Unrecognized date placeholder \"$token\" in $param_name = \"$path\". " *
-                      "Valid placeholders are $(join(DATE_PLACEHOLDERS, ", ")).")
+                      "Valid placeholders are $(join(allowed, ", "))." * hint)
         end
     end
     return path
+end
+
+"""
+    placeholder_resolution(template) → Symbol
+
+The time organization unit of a base directory: the finest
+[date placeholder](@ref DATE_PLACEHOLDERS) it contains. One of `:minute`,
+`:hour`, `:day`, or `:none` when the template carries no date placeholder at all.
+
+```julia
+placeholder_resolution("/data/{YYYYmmdd}")        # :day
+placeholder_resolution("/data/{YYYYmmdd}/{HH}")   # :hour
+placeholder_resolution("/data/{YYYYmmdd_HHMM}")   # :minute
+placeholder_resolution("/data/chivo")             # :none
+```
+"""
+function placeholder_resolution(template::AbstractString)
+    any(p -> occursin(p, template), MINUTE_PLACEHOLDERS) && return :minute
+    any(p -> occursin(p, template), HOUR_PLACEHOLDERS) && return :hour
+    any(p -> occursin(p, template), DAY_PLACEHOLDERS) && return :day
+    return :none
+end
+
+"""
+    unit_period(resolution::Symbol) → Dates.Period
+
+The length of one directory of a `:day`, `:hour` or `:minute` layout.
+"""
+function unit_period(resolution::Symbol)
+    resolution === :day && return Dates.Day(1)
+    resolution === :hour && return Dates.Hour(1)
+    resolution === :minute && return Dates.Minute(1)
+    msg_error("No directory unit for resolution $(repr(resolution)); " *
+              "expected :day, :hour or :minute.")
+end
+
+"""
+    floor_to_unit(t::DateTime, resolution::Symbol) → DateTime
+
+Start of the directory `t` falls in. `:none` returns `t` unchanged, since a flat
+directory has no time boundaries.
+"""
+function floor_to_unit(t::DateTime, resolution::Symbol)
+    resolution === :none && return t
+    return floor(t, unit_period(resolution))
 end
 
 """
@@ -161,22 +255,38 @@ function use_date_subdir(workflow::SparrowWorkflow)
     return value
 end
 
+# The appended `YYYYmmdd` directory level is always day-resolution.
 _date_string(date::AbstractString) = String(date)
 _date_string(date::DateTime) = Dates.format(date, "YYYYmmdd")
 _date_string(date::Date) = Dates.format(date, "YYYYmmdd")
 
+# Placeholder substitution uses the full time so {HH}/{mm} resolve. A date given
+# as a string shorter than YYYYmmddHHMM names the start of its window, so the
+# missing hour/minute fields are zero.
+_placeholder_date_string(date::DateTime) = Dates.format(date, "YYYYmmddHHMM")
+_placeholder_date_string(date::Date) = Dates.format(date, "YYYYmmdd") * "0000"
+function _placeholder_date_string(date::AbstractString)
+    s = String(date)
+    length(s) >= 12 && return s[1:12]
+    length(s) >= 8 && return rpad(s, 12, '0')
+    return s
+end
+
 """
     dated_dir(base, date, date_subdir::Bool) → String
 
-Resolve a base directory for `date` (a `"YYYYmmdd"` string or a `DateTime`):
+Resolve a base directory for `date` (a `DateTime`, or a date string of 8, 10 or
+12 digits naming the start of a day, hour or minute):
 
 - `base` contains a [date placeholder](@ref DATE_PLACEHOLDERS) → substitute it
-  and append nothing, so the date can sit at any level of the path.
+  and append nothing, so the date can sit at any level of the path and the
+  directory unit can be day, hour or minute.
 - otherwise, `date_subdir = true` → `base/YYYYmmdd` (the default layout).
 - otherwise, `date_subdir = false` → `base` itself, a flat directory.
 """
 function dated_dir(base::AbstractString, date, date_subdir::Bool)
-    has_date_placeholder(base) && return substitute_date_placeholders(base, _date_string(date))
+    has_date_placeholder(base) &&
+        return substitute_date_placeholders(base, _placeholder_date_string(date))
     return date_subdir ? joinpath(base, _date_string(date)) : String(base)
 end
 
@@ -184,15 +294,23 @@ end
     step_dated_dir(base, step_name, date, date_subdir::Bool) → String
 
 Per-step variant of [`dated_dir`](@ref), used for the archive and plot trees.
-The step name always sits below the date: `base/<step>/YYYYmmdd` by default,
-`<substituted base>/<step>` when `base` carries a date placeholder, and
-`base/<step>` when `date_subdir = false`.
+A [`{step}`](@ref STEP_PLACEHOLDER) token in `base` is replaced by the step name
+wherever it sits; without one the step name is appended after the resolved base:
+`base/<step>/YYYYmmdd` by default, `<substituted base>/<step>` when `base`
+carries a date placeholder, and `base/<step>` when `date_subdir = false`.
 """
 function step_dated_dir(base::AbstractString, step_name, date, date_subdir::Bool)
+    step = String(step_name)
     if has_date_placeholder(base)
-        return joinpath(substitute_date_placeholders(base, _date_string(date)), step_name)
+        resolved = substitute_date_placeholders(base, _placeholder_date_string(date))
+        has_step_placeholder(resolved) && return replace(resolved, STEP_PLACEHOLDER => step)
+        return joinpath(resolved, step)
     end
-    return date_subdir ? joinpath(base, step_name, _date_string(date)) : joinpath(base, step_name)
+    if has_step_placeholder(base)
+        resolved = replace(String(base), STEP_PLACEHOLDER => step)
+        return date_subdir ? joinpath(resolved, _date_string(date)) : resolved
+    end
+    return date_subdir ? joinpath(base, step, _date_string(date)) : joinpath(base, step)
 end
 
 """
@@ -206,20 +324,57 @@ data_dir(workflow::SparrowWorkflow, date) =
     dated_dir(workflow["base_data_dir"], date, use_date_subdir(workflow))
 
 """
-    archive_root_dir(workflow, date) → String
+    stable_root(base, param_name) → String
 
-Archive root for `date`: `base_archive_dir` with any date placeholder
-substituted, without a step or date level appended. This is where the hidden
-`.sparrow` processed-marker directory lives (see [`check_processed`](@ref)).
+The part of a base directory that does not depend on the date: every path
+component that contains no `{` placeholder, in order, or `base` itself when it
+has none. Placeholder components are dropped rather than the path being cut at
+the first one, so two trees that differ only below a placeholder keep distinct
+roots and do not share processed-file markers.
+
+```julia
+stable_root("/archive/{YYYYmmdd}/chivo", "base_archive_dir")       # "/archive/chivo"
+stable_root("/archive/{YYYYmmdd}/seapol", "base_archive_dir")      # "/archive/seapol"
+stable_root("/archive/chivo/{YYYY}/{MM}", "base_archive_dir")      # "/archive/chivo"
+stable_root("/archive/{step}/{YYYYmmdd}/{HH}", "base_archive_dir") # "/archive"
+```
+
+Errors if the first component is itself a placeholder, since the tree (and its
+`.sparrow` markers) must be anchored under a literal directory the user chose.
 """
-archive_root_dir(workflow::SparrowWorkflow, date) =
-    dated_dir(workflow["base_archive_dir"], date, false)
+function stable_root(base::AbstractString, param_name::AbstractString)
+    path = String(base)
+    occursin('{', path) || return path
+    parts = splitpath(path)
+    first_literal = findfirst(part -> !(part in ("/", "", ".", "..", "\\")), parts)
+    if first_literal === nothing || occursin('{', parts[first_literal])
+        msg_error("$param_name = \"$path\" starts with a placeholder. The first " *
+                  "directory level must be a literal path, so the processed-file " *
+                  "markers have a stable root; write e.g. \"/archive/{YYYYmmdd}\".")
+    end
+    kept = filter(part -> !occursin('{', part), parts)
+    return joinpath(kept...)
+end
+
+"""
+    archive_root_dir(workflow) → String
+
+Stable root of the archive tree: `base_archive_dir` with its placeholder
+components removed (see [`stable_root`](@ref)), or `base_archive_dir` itself
+when it has none. Independent of the date, so the hidden `.sparrow`
+processed-marker directory that lives here is one per archive tree rather than
+one per unit directory (see [`check_processed`](@ref)).
+"""
+archive_root_dir(workflow::SparrowWorkflow) =
+    stable_root(workflow["base_archive_dir"], "base_archive_dir")
 
 """
     archive_step_dir(workflow, step_name, date) → String
 
-Archive directory for one step's products on `date`, resolved from
-`base_archive_dir` by [`step_dated_dir`](@ref).
+Archive directory for one step's products at `date`, resolved from
+`base_archive_dir` by [`step_dated_dir`](@ref). Pass the product's own time (see
+[`_parse_filename_time`](@ref)) so an hour- or minute-resolution layout files
+each product under the unit it belongs to.
 """
 archive_step_dir(workflow::SparrowWorkflow, step_name, date) =
     step_dated_dir(workflow["base_archive_dir"], step_name, date, use_date_subdir(workflow))
@@ -237,6 +392,20 @@ function plot_output_dir(workflow::SparrowWorkflow, step_name, start_time, fallb
     base = get_param(workflow, "base_plot_dir", nothing)
     base === nothing && return fallback
     return step_dated_dir(base, step_name, start_time, use_date_subdir(workflow))
+end
+
+"""
+    plot_output_dir_for_file(workflow, step_name, file, start_time, fallback) → String
+
+[`plot_output_dir`](@ref) keyed on the time embedded in `file`'s own name, so an
+hour- or minute-resolution `base_plot_dir` files each figure under the unit its
+input belongs to even when a chunk spans several. Falls back to `start_time`
+(the chunk start) for a name with no recognizable timestamp.
+"""
+function plot_output_dir_for_file(workflow::SparrowWorkflow, step_name, file,
+                                  start_time, fallback)
+    file_time = something(_parse_filename_time(basename(String(file))), start_time)
+    return plot_output_dir(workflow, step_name, file_time, fallback)
 end
 
 """
@@ -890,7 +1059,15 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
         haskey(workflow.params, key) || continue
         value = workflow.params[key]
         value isa AbstractString || continue
-        validate_date_placeholders(value, key)
+        # {step} names the level the step directory goes at, so it only makes
+        # sense in the two output trees; base_data_dir has no step.
+        validate_date_placeholders(value, key; allow_step = key != "base_data_dir")
+    end
+    # The archive tree needs a literal leading directory to anchor the .sparrow
+    # processed-marker directory to, whatever placeholders follow it.
+    if haskey(workflow.params, "base_archive_dir") &&
+       workflow.params["base_archive_dir"] isa AbstractString
+        stable_root(workflow.params["base_archive_dir"], "base_archive_dir")
     end
     # The working tree layout is fixed, so placeholders there would only ever
     # produce a literal "{YYYYmmdd}" directory.
@@ -1097,6 +1274,13 @@ function assign_workers(workflow::SparrowWorkflow)
 
         # Get data source (LocalDirSource if not explicitly set)
         source = get_data_source(workflow)
+        # One chunk's worth of history, so a file that lands just after a unit
+        # boundary is still found in the directory it was written to.
+        span_seconds = resolve_span_seconds(workflow)
+
+        # The processed-marker directory sits at the stable archive root, which
+        # does not depend on the date, so resolve it once for the whole run.
+        base_archive_dir = archive_root_dir(workflow)
 
         msg_info("Watching for real time data...")
         flush(stdout)
@@ -1108,10 +1292,9 @@ function assign_workers(workflow::SparrowWorkflow)
 
         while true
             try
-                radar_date = Dates.format(now(UTC), "YYYYmmdd")
-                # The processed-marker directory follows the archive layout, so a
-                # base_archive_dir with a date placeholder tracks the current day.
-                base_archive_dir = archive_root_dir(workflow, radar_date)
+                poll_stop = now(UTC)
+                poll_start = poll_stop - Dates.Second(span_seconds)
+                radar_date = Dates.format(poll_stop, "YYYYmmdd")
 
                 # Get files to process: retry queue first, then new files
                 files_to_process = String[]
@@ -1121,14 +1304,35 @@ function assign_workers(workflow::SparrowWorkflow)
                 end
 
                 if is_remote(source)
+                    # Remote sources own their own layout; discovery stays day-based
                     new_files = [basename(f) for f in discover_files(source, radar_date)]
                 else
-                    raw_dir = _local_dir(source, radar_date)
-                    mkpath(raw_dir)
-                    new_files = poll_directory(raw_dir)
+                    # Poll the current unit directory plus any earlier one the last
+                    # span still reaches into: at day resolution that is today, plus
+                    # yesterday for one span after midnight; at hour or minute
+                    # resolution the current unit plus the previous one near the
+                    # boundary. Unit directories that do not exist yet are skipped
+                    # quietly, and only the default base/YYYYmmdd (or flat) layout
+                    # has its directory created, as before; placeholder layouts are
+                    # left to the data writer so no empty hour/minute dirs are made.
+                    if !has_date_placeholder(source.base_dir)
+                        mkpath(_local_dir(source, poll_stop))
+                    end
+                    new_files = String[]
+                    for raw_dir in unit_dirs(source, poll_start, poll_stop)
+                        isdir(raw_dir) || continue
+                        append!(new_files, poll_directory(raw_dir))
+                    end
+                    # Files are keyed by basename downstream, so de-duplicate
+                    unique!(new_files)
                     # A flat directory also holds earlier days' files, which have
-                    # no markers for today's window; only queue today's files.
-                    _is_flat(source) && (new_files = _filter_names_by_day(new_files, radar_date))
+                    # no markers for the current window; only queue files from the
+                    # day the look-back starts in onwards.
+                    if _is_flat(source)
+                        new_files = _filter_names_by_window(new_files,
+                                                            DateTime(Dates.Date(poll_start)),
+                                                            DateTime(2100))
+                    end
                 end
                 append!(files_to_process, new_files)
 
@@ -1258,6 +1462,10 @@ function process_workflow(workflow::SparrowWorkflow)
     # Get data source for checking data availability
     source = get_data_source(workflow)
 
+    # The processed-file markers live at the stable archive root, which does not
+    # depend on the date or on the archive tree's directory unit, so resolve once.
+    marker_dir = archive_root_dir(workflow)
+
     # Count of volumes skipped due to errors (only when skip_failed_volumes)
     skipped = 0
 
@@ -1268,9 +1476,6 @@ function process_workflow(workflow::SparrowWorkflow)
         msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
         try
             processed, archived = process_volume(workflow, start_time, stop_time)
-            # Resolve per-chunk so a base_archive_dir with a date placeholder
-            # keeps each day's markers beside that day's archived products.
-            marker_dir = archive_root_dir(workflow, start_time)
             mark_processed(workflow, processed, marker_dir)
             mark_processed(workflow, archived, marker_dir)
         catch e
@@ -1469,7 +1674,7 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     end
 
     # Clean up and move to archive
-    processed_files = archive_workflow(workflow, temp_dir, date)
+    processed_files = archive_workflow(workflow, temp_dir, date; start_time=start_time)
 
     # Remove the temporary directories (robust to ENOTEMPTY on networked FS)
     remove_working_dir(temp_dir)
@@ -1526,10 +1731,14 @@ end
 
 Check if a file has already been processed (exists in archive).
 
+`archive_dir` is the stable archive root from [`archive_root_dir`](@ref), not a
+dated directory: there is one `.sparrow` marker directory per archive tree, so a
+marker stays findable however the products below it are organized by time.
+
 # Arguments
 - `workflow`: Workflow instance
 - `file`: File path to check
-- `archive_dir`: Archive directory path
+- `archive_dir`: Archive root directory (see [`archive_root_dir`](@ref))
 
 # Returns
 - `true` if file already processed, `false` otherwise
@@ -1550,8 +1759,9 @@ marker_path(workflow::SparrowWorkflow, archive_dir::String, file::String) =
     mark_processed(workflow::SparrowWorkflow, files, archive_dir::String)
 
 Touch a processed-marker file for each entry in `files` under the hidden
-`.sparrow` directory in `archive_dir`. Empty `files` is a no-op (apart from
-ensuring the marker directory exists). Idempotent. Mirrors [`check_processed`].
+`.sparrow` directory in `archive_dir`, the stable archive root from
+[`archive_root_dir`](@ref). Empty `files` is a no-op (apart from ensuring the
+marker directory exists). Idempotent. Mirrors [`check_processed`].
 """
 function mark_processed(workflow::SparrowWorkflow, files, archive_dir::String)
     mkpath(joinpath(archive_dir, ".sparrow"))
