@@ -28,7 +28,9 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
     flush(stdout)
 
     processed_files = String[]
-    archive_dir = workflow["base_archive_dir"]
+    # Resolve any date placeholder in base_archive_dir so a literal "{YYYYmmdd}"
+    # directory is never created; the per-step directories are made below.
+    archive_dir = archive_root_dir(workflow, date)
 
     # Make sure the archive directory exists
     mkpath(archive_dir)
@@ -40,7 +42,7 @@ function archive_workflow(workflow::SparrowWorkflow, temp_dir, date)
             step_files = readdir(step_dir; join=true)
             filter!(!isdir,step_files)
             append!(processed_files, step_files)
-            step_archive_dir = joinpath(archive_dir, step_name, date)
+            step_archive_dir = archive_step_dir(workflow, step_name, date)
             mkpath(step_archive_dir)
             msg_debug("Archiving $(step_files) to $(step_archive_dir)...")
             archive_files(step_files, step_archive_dir, force)
@@ -53,7 +55,7 @@ end
 function link_base_data(date, workflow, raw_working_dir;
                         start_time::DateTime=DateTime(1970), stop_time::DateTime=DateTime(2100))
 
-    base_archive_dir = workflow["base_archive_dir"]
+    base_archive_dir = archive_root_dir(workflow, date)
     force_reprocess = workflow["force_reprocess"]
     # When set, a missing .sparrow marker is reconciled against existing archived
     # products (see `archived_output_exists`): if every archive step already has
@@ -66,8 +68,7 @@ function link_base_data(date, workflow, raw_working_dir;
     if is_remote(source)
         # Remote source: discover files, filter by time window, download into
         # base_data_dir as a local cache, then symlink into the working directory
-        base_data_dir = workflow["base_data_dir"]
-        cache_dir = joinpath(base_data_dir, date)
+        cache_dir = data_dir(workflow, date)
         mkpath(cache_dir)
         remote_files = discover_files(source, date)
         # Filter by time window to avoid downloading the entire day
@@ -110,13 +111,12 @@ function link_base_data(date, workflow, raw_working_dir;
         end
     else
         # Local source: symlink files
-        base_data_dir = source.base_dir
-        data_dir = joinpath(base_data_dir, date)
-        if !isdir(data_dir)
-            msg_warning("Local data directory $data_dir does not exist")
+        src_data_dir = _local_dir(source, date)
+        if !isdir(src_data_dir)
+            msg_warning("Local data directory $src_data_dir does not exist")
             return
         end
-        data_files = readdir(data_dir; join=true)
+        data_files = readdir(src_data_dir; join=true)
         filter!(!isdir, data_files)
         # Filter by time window so chunked runs only see their own files
         if start_time > DateTime(1970) && stop_time < DateTime(2100)
@@ -160,11 +160,10 @@ gap is a crash *during* the archive move itself, a narrow window; force-reproces
 a suspect date if needed.) Returns false if no archive step has matching output.
 """
 function archived_output_exists(workflow::SparrowWorkflow, scan_start::DateTime, date)
-    archive_dir = workflow["base_archive_dir"]
     stamp = Dates.format(scan_start, "YYYYmmdd_HHMMSS")
     for (step_name, step_type, input_name, archive) in workflow["steps"]
         archive || continue
-        step_dir = joinpath(archive_dir, step_name, date)
+        step_dir = archive_step_dir(workflow, step_name, date)
         isdir(step_dir) || continue
         any(f -> occursin(stamp, f), readdir(step_dir)) && return true
     end

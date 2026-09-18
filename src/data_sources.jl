@@ -18,26 +18,129 @@ The `date` parameter is a string of variable length:
 """
 abstract type DataSource end
 
+# --- Date placeholder substitution ---
+
+"""
+    substitute_date_placeholders(template, date) → String
+
+Replace date/time placeholders in `template` with the corresponding fields of
+`date`. Shared by the remote sources' `prefix_template`/`base_url` and by the
+date-aware base directories (`base_data_dir`, `base_archive_dir`,
+`base_plot_dir`, see [`dated_dir`](@ref)).
+
+`date` is either a `DateTime` or a date string of variable length, as used
+throughout the [`DataSource`](@ref) interface. The substitutions performed
+depend on how much of the date string is present:
+
+- `length(date) >= 8`: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`
+- `length(date) >= 10`: `{HH}`
+- `length(date) >= 12`: `{mm}`
+
+Placeholders with no available value are left untouched. A `DateTime` is
+formatted as `"YYYYmmddHHMM"` first, so every placeholder is substituted.
+
+# Example
+```julia
+substitute_date_placeholders("/archive/{YYYY}/{MM}/{DD}", "20240101")  # "/archive/2024/01/01"
+```
+"""
+function substitute_date_placeholders(template::AbstractString, date::AbstractString)
+    out = String(template)
+    if length(date) >= 8
+        out = replace(out, "{YYYY}" => date[1:4])
+        out = replace(out, "{MM}" => date[5:6])
+        out = replace(out, "{DD}" => date[7:8])
+        out = replace(out, "{YYYYmmdd}" => date[1:8])
+    end
+    if length(date) >= 10
+        out = replace(out, "{HH}" => date[9:10])
+    end
+    if length(date) >= 12
+        out = replace(out, "{mm}" => date[11:12])
+    end
+    return out
+end
+
+substitute_date_placeholders(template::AbstractString, date::DateTime) =
+    substitute_date_placeholders(template, Dates.format(date, "YYYYmmddHHMM"))
+
+substitute_date_placeholders(template::AbstractString, date::Date) =
+    substitute_date_placeholders(template, Dates.format(date, "YYYYmmdd"))
+
 # --- LocalDirSource ---
 
 """
-    LocalDirSource <: DataSource
+    LocalDirSource(base_dir; date_subdir=true) <: DataSource
 
 Data source backed by a local directory. Default and backward-compatible.
 
+The directory actually read for a given date is resolved by [`dated_dir`](@ref):
+
+- `base_dir` contains a date placeholder (`{YYYYmmdd}`, `{YYYY}`, `{MM}`,
+  `{DD}`) → the placeholders are substituted and nothing is appended.
+- otherwise, with `date_subdir = true` (the default) → `base_dir/YYYYmmdd`.
+- otherwise, with `date_subdir = false` → `base_dir` itself, a flat directory
+  holding every date's files.
+
 # Fields
-- `base_dir::String`: Base directory containing date-organized subdirectories
+- `base_dir::String`: Base directory, optionally containing date placeholders
+- `date_subdir::Bool`: Append a `YYYYmmdd` directory level when `base_dir` has
+  no placeholder (default `true`)
 """
 struct LocalDirSource <: DataSource
     base_dir::String
+    date_subdir::Bool
+    function LocalDirSource(base_dir::AbstractString, date_subdir::Bool)
+        # Reject typos such as {yyyy} up front; otherwise every day would just
+        # report "no data" against a literal directory name.
+        validate_date_placeholders(base_dir, "LocalDirSource base_dir")
+        return new(String(base_dir), date_subdir)
+    end
 end
 
+LocalDirSource(base_dir::AbstractString; date_subdir::Bool = true) =
+    LocalDirSource(base_dir, date_subdir)
+
+"""
+    _is_flat(source::LocalDirSource) → Bool
+
+True when the source reads one flat directory holding every date's files
+(no date placeholder in `base_dir` and `date_subdir = false`).
+"""
+_is_flat(source::LocalDirSource) = !has_date_placeholder(source.base_dir) && !source.date_subdir
+
+"""
+    _filter_names_by_day(files, date) → Vector{String}
+
+Keep the files whose filename timestamp (see `_parse_filename_time`) falls on
+`date` (`"YYYYmmdd"`, longer strings are truncated to the day). Files whose
+names carry no recognizable timestamp are kept, since they could belong to any
+date. Used to pick one day's files out of a flat directory.
+"""
+function _filter_names_by_day(files::AbstractVector{<:AbstractString}, date::AbstractString)
+    day = length(date) >= 8 ? date[1:8] : date
+    return filter(files) do f
+        scan_start = _parse_filename_time(basename(f))
+        scan_start === nothing || Dates.format(scan_start, "YYYYmmdd") == day
+    end
+end
+
+"""
+    _local_dir(source::LocalDirSource, date) → String
+
+Directory this source reads for `date`, honouring date placeholders in
+`base_dir` and the `date_subdir` flag.
+"""
+_local_dir(source::LocalDirSource, date) = dated_dir(source.base_dir, date, source.date_subdir)
+
 function discover_files(source::LocalDirSource, date::String)
-    dir = joinpath(source.base_dir, date)
+    dir = _local_dir(source, date)
     isdir(dir) || return String[]
     try
         files = readdir(dir; join=true)
         filter!(f -> !isdir(f) && !startswith(basename(f), "."), files)
+        # A flat directory holds every date, so select this day's files by name
+        _is_flat(source) && (files = _filter_names_by_day(files, date))
         return reverse(files)
     catch e
         msg_warning("Error reading directory $dir: $e")
@@ -46,13 +149,37 @@ function discover_files(source::LocalDirSource, date::String)
 end
 
 function fetch_file(source::LocalDirSource, filename::String, dest_dir::String, date::String)
-    return joinpath(source.base_dir, date, filename)
+    return joinpath(_local_dir(source, date), filename)
 end
 
 is_remote(::LocalDirSource) = false
 
 function has_data(source::LocalDirSource, date::String)
-    return isdir(joinpath(source.base_dir, date))
+    dir = _local_dir(source, date)
+    isdir(dir) || return false
+    # A dated directory (placeholder or `YYYYmmdd` subdirectory) is per-day by
+    # construction, so its existence is the answer. A flat directory holds every
+    # date at once, so look at the filenames instead — otherwise a month or year
+    # run would think every day had data and iterate over empty chunks.
+    _is_flat(source) || return true
+    day = length(date) >= 8 ? date[1:8] : date
+    any_parseable = false
+    any_unparseable = false
+    for entry in readdir(dir)
+        startswith(entry, ".") && continue
+        isdir(joinpath(dir, entry)) && continue
+        scan_start = _parse_filename_time(entry)
+        if scan_start === nothing
+            any_unparseable = true
+        else
+            any_parseable = true
+            Dates.format(scan_start, "YYYYmmdd") == day && return true
+        end
+    end
+    # When the filenames carry timestamps, trust them: a stray README or similar
+    # must not make every day of a year run look populated. Only when nothing in
+    # the directory is parseable do we have to assume the day may have data.
+    return any_unparseable && !any_parseable
 end
 
 supports_streaming(::DataSource) = false
@@ -113,19 +240,7 @@ end
 
 """Resolve an S3 prefix template with date/time and extras values."""
 function _s3_resolve_prefix(source::S3BucketSource, date::String)
-    prefix = source.prefix_template
-    if length(date) >= 8
-        prefix = replace(prefix, "{YYYY}" => date[1:4])
-        prefix = replace(prefix, "{MM}" => date[5:6])
-        prefix = replace(prefix, "{DD}" => date[7:8])
-        prefix = replace(prefix, "{YYYYmmdd}" => date[1:8])
-    end
-    if length(date) >= 10
-        prefix = replace(prefix, "{HH}" => date[9:10])
-    end
-    if length(date) >= 12
-        prefix = replace(prefix, "{mm}" => date[11:12])
-    end
+    prefix = substitute_date_placeholders(source.prefix_template, date)
     # Resolve extras placeholders
     for (key, val) in source.extras
         prefix = replace(prefix, "{$(key)}" => val)
@@ -387,7 +502,9 @@ end
 
 Data source for HTTP directory listings.
 
-URL supports date placeholders: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`.
+URL supports date placeholders: `{YYYY}`, `{MM}`, `{DD}`, `{YYYYmmdd}`, and —
+when an hour/minute-level date string is supplied — `{HH}` and `{mm}`
+(see [`substitute_date_placeholders`](@ref)).
 
 # Fields
 - `base_url::String`: URL template with optional date placeholders
@@ -421,14 +538,7 @@ function HTTPDirSource(;
 end
 
 function _http_resolve_url(source::HTTPDirSource, date::String)
-    url = source.base_url
-    if length(date) >= 8
-        url = replace(url, "{YYYY}" => date[1:4])
-        url = replace(url, "{MM}" => date[5:6])
-        url = replace(url, "{DD}" => date[7:8])
-        url = replace(url, "{YYYYmmdd}" => date[1:8])
-    end
-    return url
+    return substitute_date_placeholders(source.base_url, date)
 end
 
 function _http_auth_headers(source::HTTPDirSource)

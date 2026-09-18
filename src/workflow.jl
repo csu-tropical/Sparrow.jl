@@ -113,9 +113,122 @@ function get_daisho_params(workflow::SparrowWorkflow)
 end
 
 """
+    DATE_PLACEHOLDERS
+
+Date placeholders accepted in `base_data_dir`, `base_archive_dir` and
+`base_plot_dir`. A base directory containing any of these has the date
+substituted in place, and no extra date directory level is appended.
+
+See [`dated_dir`](@ref) and [`substitute_date_placeholders`](@ref).
+"""
+const DATE_PLACEHOLDERS = ("{YYYYmmdd}", "{YYYY}", "{MM}", "{DD}")
+
+"""
+    has_date_placeholder(path) → Bool
+
+True if `path` contains one of the [`DATE_PLACEHOLDERS`](@ref).
+"""
+has_date_placeholder(path::AbstractString) = any(p -> occursin(p, path), DATE_PLACEHOLDERS)
+
+"""
+    validate_date_placeholders(path, param_name) → path
+
+Check that every `{...}` token in `path` is one of the [`DATE_PLACEHOLDERS`](@ref).
+Called from [`setup_workflow_params`](@ref) so a typo such as `{yyyy}` fails at
+startup rather than silently creating a literal directory of that name.
+"""
+function validate_date_placeholders(path::AbstractString, param_name::AbstractString)
+    for m in eachmatch(r"\{[^}]*\}", path)
+        token = String(m.match)
+        if !(token in DATE_PLACEHOLDERS)
+            msg_error("Unrecognized date placeholder \"$token\" in $param_name = \"$path\". " *
+                      "Valid placeholders are $(join(DATE_PLACEHOLDERS, ", ")).")
+        end
+    end
+    return path
+end
+
+"""
+    use_date_subdir(workflow) → Bool
+
+Whether the output layout appends a `YYYYmmdd` directory level to base
+directories that contain no date placeholder. Set by the optional workflow
+parameter `date_subdir` (default `true`).
+"""
+function use_date_subdir(workflow::SparrowWorkflow)
+    value = get_param(workflow, "date_subdir", true)
+    value isa Bool || msg_error("date_subdir must be true or false, got $(repr(value)).")
+    return value
+end
+
+_date_string(date::AbstractString) = String(date)
+_date_string(date::DateTime) = Dates.format(date, "YYYYmmdd")
+_date_string(date::Date) = Dates.format(date, "YYYYmmdd")
+
+"""
+    dated_dir(base, date, date_subdir::Bool) → String
+
+Resolve a base directory for `date` (a `"YYYYmmdd"` string or a `DateTime`):
+
+- `base` contains a [date placeholder](@ref DATE_PLACEHOLDERS) → substitute it
+  and append nothing, so the date can sit at any level of the path.
+- otherwise, `date_subdir = true` → `base/YYYYmmdd` (the default layout).
+- otherwise, `date_subdir = false` → `base` itself, a flat directory.
+"""
+function dated_dir(base::AbstractString, date, date_subdir::Bool)
+    has_date_placeholder(base) && return substitute_date_placeholders(base, _date_string(date))
+    return date_subdir ? joinpath(base, _date_string(date)) : String(base)
+end
+
+"""
+    step_dated_dir(base, step_name, date, date_subdir::Bool) → String
+
+Per-step variant of [`dated_dir`](@ref), used for the archive and plot trees.
+The step name always sits below the date: `base/<step>/YYYYmmdd` by default,
+`<substituted base>/<step>` when `base` carries a date placeholder, and
+`base/<step>` when `date_subdir = false`.
+"""
+function step_dated_dir(base::AbstractString, step_name, date, date_subdir::Bool)
+    if has_date_placeholder(base)
+        return joinpath(substitute_date_placeholders(base, _date_string(date)), step_name)
+    end
+    return date_subdir ? joinpath(base, step_name, _date_string(date)) : joinpath(base, step_name)
+end
+
+"""
+    data_dir(workflow, date) → String
+
+Input directory for `date`, resolved from `base_data_dir` by [`dated_dir`](@ref).
+For remote data sources this is the local download cache, which follows the same
+layout as a local input tree.
+"""
+data_dir(workflow::SparrowWorkflow, date) =
+    dated_dir(workflow["base_data_dir"], date, use_date_subdir(workflow))
+
+"""
+    archive_root_dir(workflow, date) → String
+
+Archive root for `date`: `base_archive_dir` with any date placeholder
+substituted, without a step or date level appended. This is where the hidden
+`.sparrow` processed-marker directory lives (see [`check_processed`](@ref)).
+"""
+archive_root_dir(workflow::SparrowWorkflow, date) =
+    dated_dir(workflow["base_archive_dir"], date, false)
+
+"""
+    archive_step_dir(workflow, step_name, date) → String
+
+Archive directory for one step's products on `date`, resolved from
+`base_archive_dir` by [`step_dated_dir`](@ref).
+"""
+archive_step_dir(workflow::SparrowWorkflow, step_name, date) =
+    step_dated_dir(workflow["base_archive_dir"], step_name, date, use_date_subdir(workflow))
+
+"""
     plot_output_dir(workflow, step_name, start_time, fallback) → String
 
-Destination directory for a plot step's figures: `base_plot_dir/<step_name>/<date>`.
+Destination directory for a plot step's figures, resolved from `base_plot_dir`
+by [`step_dated_dir`](@ref) — `base_plot_dir/<step_name>/<date>` by default.
 Falls back to the step's working `output_dir` (`fallback`) when `base_plot_dir`
 is unset. Plot steps write here directly (and are declared `archive=false`),
 since the archive machinery only routes archived output to `base_archive_dir`.
@@ -123,20 +236,21 @@ since the archive machinery only routes archived output to `base_archive_dir`.
 function plot_output_dir(workflow::SparrowWorkflow, step_name, start_time, fallback)
     base = get_param(workflow, "base_plot_dir", nothing)
     base === nothing && return fallback
-    return joinpath(base, step_name, Dates.format(start_time, "YYYYmmdd"))
+    return step_dated_dir(base, step_name, start_time, use_date_subdir(workflow))
 end
 
 """
     get_data_source(workflow::SparrowWorkflow) → DataSource
 
 Get the data source for a workflow. If `data_source` is set in the workflow
-parameters, return it. Otherwise, create a `LocalDirSource` from `base_data_dir`.
+parameters, return it. Otherwise, create a `LocalDirSource` from `base_data_dir`
+honouring the workflow's `date_subdir` setting.
 """
 function get_data_source(workflow::SparrowWorkflow)
     if haskey(workflow.params, "data_source")
         return workflow["data_source"]::DataSource
     else
-        return LocalDirSource(workflow["base_data_dir"])
+        return LocalDirSource(workflow["base_data_dir"]; date_subdir=use_date_subdir(workflow))
     end
 end
 
@@ -769,6 +883,26 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
         workflow["daisho_params"] = DaishoParameters(workflow["daisho_config"])
     end
 
+    # Validate the output directory layout on the main process so a mistyped
+    # placeholder or a non-Bool date_subdir fails at startup rather than creating
+    # a literal "{yyyy}" directory hours into a run.
+    for key in ("base_data_dir", "base_archive_dir", "base_plot_dir")
+        haskey(workflow.params, key) || continue
+        value = workflow.params[key]
+        value isa AbstractString || continue
+        validate_date_placeholders(value, key)
+    end
+    # The working tree layout is fixed, so placeholders there would only ever
+    # produce a literal "{YYYYmmdd}" directory.
+    if haskey(workflow.params, "base_working_dir") &&
+       workflow.params["base_working_dir"] isa AbstractString &&
+       occursin(r"\{[^}]*\}", workflow.params["base_working_dir"])
+        msg_error("Date placeholders are not supported in base_working_dir " *
+                  "(got \"$(workflow.params["base_working_dir"])\"); the working tree " *
+                  "is always laid out as base_working_dir/<random>/<step>/YYYYmmdd.")
+    end
+    use_date_subdir(workflow)
+
     # Validate on the main process so a typo fails at startup rather than hours
     # later on a worker part-way through a gridding step.
     resolve_index_time(workflow)
@@ -945,7 +1079,6 @@ Files are organized by time windows and assigned to workers as they become avail
 function assign_workers(workflow::SparrowWorkflow)
 
     msg_info("Processing data with $(typeof(workflow))...")
-    base_archive_dir = workflow["base_archive_dir"]
 
     # Process a time period of radar data
     if !workflow["realtime"]
@@ -976,6 +1109,9 @@ function assign_workers(workflow::SparrowWorkflow)
         while true
             try
                 radar_date = Dates.format(now(UTC), "YYYYmmdd")
+                # The processed-marker directory follows the archive layout, so a
+                # base_archive_dir with a date placeholder tracks the current day.
+                base_archive_dir = archive_root_dir(workflow, radar_date)
 
                 # Get files to process: retry queue first, then new files
                 files_to_process = String[]
@@ -987,9 +1123,12 @@ function assign_workers(workflow::SparrowWorkflow)
                 if is_remote(source)
                     new_files = [basename(f) for f in discover_files(source, radar_date)]
                 else
-                    raw_dir = joinpath(source.base_dir, radar_date)
+                    raw_dir = _local_dir(source, radar_date)
                     mkpath(raw_dir)
                     new_files = poll_directory(raw_dir)
+                    # A flat directory also holds earlier days' files, which have
+                    # no markers for today's window; only queue today's files.
+                    _is_flat(source) && (new_files = _filter_names_by_day(new_files, radar_date))
                 end
                 append!(files_to_process, new_files)
 
@@ -1112,7 +1251,6 @@ function process_workflow(workflow::SparrowWorkflow)
     span_seconds = resolve_span_seconds(workflow)
     force_reprocess = workflow["force_reprocess"]
     reverse_order = workflow["reverse"]
-    base_archive_dir = workflow["base_archive_dir"]
     # When false (default), any volume that errors aborts the whole batch. Set
     # `skip_failed_volumes = true` in the workflow to log and continue instead.
     skip_failed_volumes = get_param(workflow, "skip_failed_volumes", false)
@@ -1130,8 +1268,11 @@ function process_workflow(workflow::SparrowWorkflow)
         msg_info("Processing $(Dates.format(start_time, "YYYYmmdd_HHMMSS"))...")
         try
             processed, archived = process_volume(workflow, start_time, stop_time)
-            mark_processed(workflow, processed, base_archive_dir)
-            mark_processed(workflow, archived, base_archive_dir)
+            # Resolve per-chunk so a base_archive_dir with a date placeholder
+            # keeps each day's markers beside that day's archived products.
+            marker_dir = archive_root_dir(workflow, start_time)
+            mark_processed(workflow, processed, marker_dir)
+            mark_processed(workflow, archived, marker_dir)
         catch e
             skip_failed_volumes || rethrow()
             skipped += 1
@@ -1300,12 +1441,14 @@ function process_volume(workflow::SparrowWorkflow, start_time, stop_time)
     # Set up the working directories
     temp_dir = initialize_working_dirs(workflow, date; start_time=start_time, stop_time=stop_time)
 
-    # Restrict the input files to those in [start_time, stop_time). The returned
-    # `input_files` is used by the caller to mark processed files, so it must
-    # reflect only the chunk window — otherwise files outside the window would
-    # be marked processed without actually being touched.
-    base_data_dir = joinpath(workflow["base_data_dir"], date)
-    input_files = readdir(base_data_dir; join=true)
+    # The returned `input_files` is used by the caller to mark processed files.
+    # link_base_data has already selected this chunk's inputs from the data
+    # source, whatever its layout, into the working base_data directory, so list
+    # that rather than re-deriving the source directory here. Then restrict to
+    # [start_time, stop_time) by scan time so nothing outside the window is
+    # marked processed without actually being touched.
+    working_data_dir = joinpath(temp_dir, "base_data", date)
+    input_files = readdir(working_data_dir; join=true)
     filter!(!isdir, input_files)
     filter!(input_files) do file
         scan_start = get_scan_start(file)

@@ -205,6 +205,8 @@ workflow = MyWorkflow(
     
     # Directories
     base_plot_dir = "/plots",      # Output plots directory
+    date_subdir = true,            # Append a YYYYmmdd level to the base directories
+                                   #   (default true; see "Customizing the date directory")
     
     # Radar-specific
     raw_moment_names = ["DBZ", "VEL", "WIDTH"],
@@ -251,25 +253,92 @@ end
 
 ### Directory Hierarchy
 
-Sparrow creates a structured directory hierarchy:
+With the default layout, every tree carries a `YYYYmmdd` date level. For a
+workflow with the steps `convert`, `qc` and `grid` processing 1 January 2024:
 
 ```
-base_working_dir/
-├── step1_convert/
-│   ├── 20240101_0000/
-│   ├── 20240101_0010/
-│   └── 20240101_0020/
-├── step2_qc/
-│   ├── 20240101_0000/
-│   └── ...
-└── step3_grid/
+base_data_dir/
+└── 20240101/                  # raw input files for the day
+    ├── cfrad.20240101_000012.000_..._SUR.nc
     └── ...
 
+base_working_dir/
+└── Xa7Bq2/                    # one random scratch directory per chunk
+    ├── base_data/20240101/    # symlinks to the chunk's input files
+    ├── convert/20240101/
+    ├── qc/20240101/
+    └── grid/20240101/
+
 base_archive_dir/
-├── converted/
-├── qc/
-└── gridded/
+├── .sparrow/                  # hidden processed-file markers
+├── convert/20240101/
+├── qc/20240101/
+└── grid/20240101/
+
+base_plot_dir/
+├── plot_rhi/20240101/
+└── plot_composite/20240101/
 ```
+
+The working tree is disposable: it is created per chunk under a random
+subdirectory of `base_working_dir` and removed when the chunk finishes. Only
+steps declared with `archive = true` have their output moved to
+`base_archive_dir`; plot steps write straight to `base_plot_dir`.
+
+### Customizing the date directory
+
+The date does not have to be the deepest level. `base_data_dir`,
+`base_archive_dir` and `base_plot_dir` accept the date placeholders
+`{YYYYmmdd}`, `{YYYY}`, `{MM}` and `{DD}`. When a base directory contains any of
+them, the date is substituted **in place** and no date level is appended, so the
+date can sit anywhere in the path — above a platform directory, for instance:
+
+| Parameter value | Resolved directory for 2024-01-01 |
+| --- | --- |
+| `base_archive_dir = "/archive"` | `/archive/<step>/20240101/` |
+| `base_archive_dir = "/archive/{YYYYmmdd}/chivo"` | `/archive/20240101/chivo/<step>/` |
+| `base_archive_dir = "/archive/{YYYY}/{MM}/{DD}"` | `/archive/2024/01/01/<step>/` |
+| `base_data_dir = "/data/chivo"` with `date_subdir = false` | `/data/chivo/` (read directly) |
+
+An unrecognized token — `{yyyy}`, `{YYYYMMDD}`, `{date}` — is rejected at
+startup with the list of valid placeholders, rather than creating a directory
+with that literal name.
+
+To drop the date level entirely without using placeholders, set the optional
+`date_subdir` parameter to `false`:
+
+```julia
+workflow = MyWorkflow(
+    base_data_dir = "/data/chivo",     # files sit directly here, no 20240101/ level
+    base_archive_dir = "/archive/chivo",
+    date_subdir = false,
+    ...
+)
+```
+
+With `date_subdir = false` the input directory is read flat, so Sparrow selects
+a day's files by the timestamps embedded in the filenames
+(`cfrad.YYYYmmdd_HHMMSS...`, `KEVXYYYYmmdd_HHMMSS...`, `...YYYYmmdd-HHMMSS...`).
+Files whose names carry no recognizable timestamp are offered to every day and
+filtered by their scan time; they only make a day count as "having data" when
+nothing in the directory has a parseable name. `date_subdir` is ignored for any
+base directory that already contains a placeholder.
+
+The hidden `.sparrow` directory of processed-file markers lives at the resolved
+archive root, so with a date placeholder in `base_archive_dir` the markers sit
+beside each day's products (`/archive/20240101/chivo/.sparrow/`) rather than in
+one global directory.
+
+Two things are deliberately unaffected:
+
+- **The working tree.** `base_working_dir/<random>/<step>/YYYYmmdd/` is fixed;
+  it is scratch space that is deleted after each chunk, and some steps (notably
+  `RadxConvertStep`) rely on its date level.
+- **Remote data sources.** `S3BucketSource` and `HTTPDirSource` already lay out
+  their remote paths with the `prefix_template`/`base_url` placeholders, which
+  additionally support `{HH}` and `{mm}`. `base_data_dir` still controls the
+  layout of the *local download cache* for those sources, and follows the same
+  rules as a local input directory.
 
 ### Step Input/Output
 

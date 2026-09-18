@@ -71,7 +71,10 @@ workflow = SimpleWorkflow(
 
 ### Step 2: Run It
 
-Point `base_data_dir` at any directory of radar files and run the workflow for a day you have data:
+Point `base_data_dir` at a directory of radar files and run the workflow for a
+day you have data. By default Sparrow expects the files in a `YYYYmmdd/`
+subdirectory of `base_data_dir` (`/path/to/your/radar/files/20240101/`); if your
+files sit directly in that directory, add `date_subdir = false` to the workflow:
 
 ```bash
 sparrow my_workflow.jl --datetime 20240101_000000
@@ -293,12 +296,20 @@ Every workflow must have these parameters:
 
 - `base_working_dir`: Temporary working directory for intermediate files
 - `base_archive_dir`: Directory for archived/processed files
-- `base_data_dir`: Directory containing raw input data
+- `base_data_dir`: Directory containing raw input data, read from a `YYYYmmdd/`
+  subdirectory unless `date_subdir = false` or the path contains a date
+  placeholder
 - `steps`: Vector of tuples: `(step_name, step_type, input_directory, archive)`
 
 ### Common Optional Parameters
 
 - `base_plot_dir`: Directory for output plots
+- `date_subdir`: Append a `YYYYmmdd` directory level to `base_data_dir`,
+  `base_archive_dir` and `base_plot_dir` (default: `true`). Set to `false` for a
+  flat layout. Those three directories also accept the date placeholders
+  `{YYYYmmdd}`, `{YYYY}`, `{MM}` and `{DD}`, which put the date anywhere in the
+  path and take precedence over `date_subdir` — see
+  [Customizing the date directory](@ref).
 - `span_seconds`: Time span for each processing chunk (default: 600 seconds). Accepts an integer number of seconds (`1200`), a string with a unit code (`"20S"`, `"5M"`, `"10H"`, `"1D"`), or a `Dates.Period` (`Minute(5)`). The legacy `minute_span` parameter still works but emits a deprecation warning.
 - `daisho_config`: Path to a Daisho TOML configuration file, required by the gridding steps. Generate a template with `using Daisho; print_config("daisho.toml")`.
 - `start_time` / `stop_time`: Explicit processing period, given together, in place of
