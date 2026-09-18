@@ -106,6 +106,10 @@ end
     include("test_chunking.jl")
 end
 
+@testset "Processing Period Selection" begin
+    include("test_time_window.jl")
+end
+
 @testset "Grid Configuration" begin
     include("test_grid.jl")
 end

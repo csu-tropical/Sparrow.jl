@@ -210,6 +210,81 @@ sparrow my_workflow.jl --datetime 20240101_000000 \
 
 This will submit jobs to Slurm with 10 workers.
 
+## Selecting the Processing Period
+
+There are two ways to say which data a run should process: a single `datetime`,
+or an explicit `start_time`/`stop_time` window. Both are chunked into windows of
+`span_seconds`, and every step runs once per chunk.
+
+### By `datetime`
+
+The `datetime` is always the **start** of the period, and it is **never aligned
+or truncated to a `span_seconds` boundary**. How much data is processed depends
+on how many digits you supply:
+
+| `datetime`        | Period processed                                              |
+|-------------------|---------------------------------------------------------------|
+| `2024`            | the whole year, chunked by `span_seconds`                     |
+| `202401`          | the whole month, chunked by `span_seconds`                    |
+| `20240101`        | that whole day, chunked by `span_seconds`                     |
+| `20240101_14`     | that whole hour (14:00:00–15:00:00), chunked by `span_seconds` |
+| `20240101_1418`   | one window: 14:18:00 to 14:18:00 + `span_seconds`             |
+| `20240101_141820` | one window: 14:18:20 to 14:18:20 + `span_seconds`             |
+
+Any other number of digits is an error listing these six formats.
+
+So with `span_seconds = "10M"`, `--datetime 20240101_14` processes six windows
+(14:00, 14:10, ... 14:50), while `--datetime 20240101_1418` processes the single
+window 14:18:00–14:28:00 — the minutes are used as given, not snapped back to
+14:10 or 14:20.
+
+Year, month, day and hour runs are chunked from the start of the year, month,
+day or hour. If `span_seconds` does not divide the range evenly, the trailing
+partial chunk is skipped and a warning is emitted — for example
+`span_seconds = 700` over an hour processes 5 chunks and leaves the last 100
+seconds unprocessed. Use `start_time`/`stop_time` when you need the remainder.
+
+### By `start_time` and `stop_time`
+
+To process an arbitrary period, set both `start_time` and `stop_time` in the
+workflow file next to your other inputs:
+
+```julia
+workflow = MyWorkflow(
+    # ... other parameters ...
+    span_seconds = "10M",
+    start_time = "20240101_1400",     # inclusive
+    stop_time  = "20240102_0600",     # exclusive
+)
+```
+
+Both accept the same formats as `datetime` (or a `DateTime` value). The window
+is half-open — `[start_time, stop_time)` — and is split into `span_seconds`
+chunks, with the final chunk **clipped** to `stop_time` rather than dropped, so
+the whole period is covered. Chunks are also split at midnight, since each
+volume reads its input from a single day directory. Days with no data are skipped.
+
+The same window can be given on the command line instead:
+
+```bash
+sparrow my_workflow.jl --start 20240101_1400 --stop 20240102_0600
+```
+
+### Precedence
+
+When more than one of these is present, the first match wins:
+
+1. `--datetime` on the command line (overrides `datetime` and
+   `start_time`/`stop_time` in the workflow file)
+2. `--start`/`--stop` on the command line (both are required together)
+3. `start_time`/`stop_time` in the workflow file (both are required together)
+4. `datetime` in the workflow file
+5. `"now"`, the current time
+
+A workflow file may not set both `datetime` and `start_time`/`stop_time` — that
+is ambiguous and raises an error. Realtime mode (`--realtime`) processes data as
+it arrives, so it accepts none of these and errors if one is supplied.
+
 ## Understanding Workflow Parameters
 
 ### Required Parameters
@@ -226,6 +301,8 @@ Every workflow must have these parameters:
 - `base_plot_dir`: Directory for output plots
 - `span_seconds`: Time span for each processing chunk (default: 600 seconds). Accepts an integer number of seconds (`1200`), a string with a unit code (`"20S"`, `"5M"`, `"10H"`, `"1D"`), or a `Dates.Period` (`Minute(5)`). The legacy `minute_span` parameter still works but emits a deprecation warning.
 - `daisho_config`: Path to a Daisho TOML configuration file, required by the gridding steps. Generate a template with `using Daisho; print_config("daisho.toml")`.
+- `start_time` / `stop_time`: Explicit processing period, given together, in place of
+  `datetime` (see [Selecting the Processing Period](@ref))
 - `reverse`: Process files in reverse chronological order (default: false)
 - `message_level`: Verbosity level (0-4, default: 2)
 - `raw_moment_names`: Names of radar moments in raw data

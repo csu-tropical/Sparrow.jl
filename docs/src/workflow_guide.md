@@ -197,6 +197,8 @@ workflow = MyWorkflow(
     
     # Time handling
     span_seconds = "10M",          # Chunk length: seconds (600) or "20S"/"5M"/"10H"/"1D"
+    start_time = "20240101_1400",  # Optional explicit processing period, given
+    stop_time  = "20240102_0600",  #   together and used instead of datetime
     reverse = false,               # Process in reverse chronological order
     index_time = "scan_start",     # Time coordinate of gridded output:
                                    #   "scan_start" (default), "start_time", "stop_time"
@@ -301,6 +303,53 @@ The workflow system:
 at sub-minute granularity (e.g. `span_seconds = 10`). It also accepts a string
 with a unit code — `"20S"` (seconds), `"5M"` (minutes), `"10H"` (hours),
 `"1D"` (days) — or a `Dates.Period` such as `Minute(5)`.
+
+#### Selecting the Period to Process
+
+The period itself comes from either a single `datetime` (the `--datetime`
+command-line option, or a `datetime` workflow parameter) or an explicit
+`start_time`/`stop_time` pair.
+
+A `datetime` is always the **start** of the period and is **never aligned or
+truncated to a `span_seconds` boundary**. The number of digits selects how much
+is processed:
+
+| `datetime`        | Period processed                                    |
+|-------------------|-----------------------------------------------------|
+| `2024`            | the whole year, chunked by `span_seconds`           |
+| `202401`          | the whole month, chunked by `span_seconds`          |
+| `20240101`        | that whole day, chunked by `span_seconds`           |
+| `20240101_14`     | that whole hour, chunked by `span_seconds`          |
+| `20240101_1418`   | one window: 14:18:00 to 14:18:00 + `span_seconds`   |
+| `20240101_141820` | one window: 14:18:20 to 14:18:20 + `span_seconds`   |
+
+Year, month, day and hour runs are chunked from the start of the year, month,
+day or hour; if `span_seconds` does not divide the range evenly the trailing
+partial chunk is skipped with a warning.
+
+For an arbitrary period, set both `start_time` and `stop_time` instead:
+
+```julia
+workflow = MyWorkflow(
+    span_seconds = "10M",
+    start_time = "20240101_1400",   # inclusive
+    stop_time  = "20240102_0600",   # exclusive
+)
+```
+
+or pass the window at run time:
+
+```bash
+sparrow my_workflow.jl --start 20240101_1400 --stop 20240102_0600
+```
+
+The window is half-open — `[start_time, stop_time)` — and its final chunk is
+clipped to `stop_time` rather than dropped; chunks are also split at midnight. When several of these are present,
+`--datetime` beats `--start`/`--stop`, which beat `start_time`/`stop_time` in
+the workflow file, which beat `datetime` in the workflow file, which beats
+`"now"`. A workflow file that sets both `datetime` and `start_time`/`stop_time`
+is ambiguous and raises an error, and realtime mode accepts none of them. See
+[Selecting the Processing Period](@ref) for the full details.
 
 #### Migration from `minute_span`
 
