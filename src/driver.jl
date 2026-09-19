@@ -47,7 +47,8 @@ function parse_arguments(args)
             help = "Run on Slurm"
             action = :store_true
         "--paths_file"
-            help = "File overriding data paths"
+            help = "Julia file overriding base_data_dir, base_working_dir, base_archive_dir, " *
+                   "base_plot_dir and/or date_subdir, so one workflow file runs on different machines"
             arg_type = String
             default = "none"
         "--verbose", "-v"

@@ -20,6 +20,40 @@ Pkg.add("Ronin")
 Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 ```
 
+### Optional: Plotting
+
+The `Plot*Step` family (`PlotLargemapStep`, `PlotDBZCompositeStep`, `PlotCompositeStep`,
+`PlotDBZVelStep`, `PlotDBZRainrateStep`, `PlotRHIStep`, `PlotPPIVolStep`) is provided by a
+package extension that needs four extra packages:
+
+```julia
+using Pkg
+Pkg.add(["CairoMakie", "GeoMakie", "ColorSchemes", "Images"])
+```
+
+You only need these if your workflow uses a plot step. Sparrow loads them
+automatically at startup whenever they are installed, so no `using` line is
+needed in the workflow file; if they are missing, running a plot step raises an
+error naming the packages to install.
+
+### Developing from Cloned Repositories
+
+If you are actively developing Sparrow or one of its dependencies, clone the
+repositories and install them in development mode instead, in dependency
+order (Springsteel, Daisho, Ronin, then Sparrow):
+
+```julia
+using Pkg
+Pkg.develop(path="/path/to/Springsteel.jl")
+Pkg.develop(path="/path/to/Daisho.jl")
+Pkg.develop(path="/path/to/Ronin.jl")
+Pkg.develop(path="/path/to/Sparrow.jl")
+```
+
+Equivalently, in Package mode (press `]` in the REPL): `dev /path/to/Springsteel.jl`,
+then `dev /path/to/Daisho.jl`, `dev /path/to/Ronin.jl`, and `dev /path/to/Sparrow.jl`.
+Add the plotting packages from the previous section too if you need them.
+
 ### Installing the `sparrow` Command
 
 Workflows are run with the `sparrow` launcher script bundled with the package. When you install Sparrow with the package manager the script lives inside the package directory, so copy it onto your PATH (default `~/.local/bin`) with:
@@ -74,7 +108,11 @@ workflow = SimpleWorkflow(
 Point `base_data_dir` at a directory of radar files and run the workflow for a
 day you have data. By default Sparrow expects the files in a `YYYYMMDD/`
 subdirectory of `base_data_dir` (`/path/to/your/radar/files/20240101/`); if your
-files sit directly in that directory, add `date_subdir = false` to the workflow:
+files sit directly in that directory instead, add `date_subdir = false` to the
+workflow. For archives where the date sits somewhere else entirely, a
+placeholder such as `base_data_dir = "/data/{YYYYMMDD}/chivo"` puts the date
+wherever you need it — see
+[Customizing the date directory](@ref) for the full set of placeholders:
 
 ```bash
 sparrow my_workflow.jl --datetime 20240101_000000
@@ -287,6 +325,43 @@ When more than one of these is present, the first match wins:
 A workflow file may not set both `datetime` and `start_time`/`stop_time` — that
 is ambiguous and raises an error. Realtime mode (`--realtime`) processes data as
 it arrives, so it accepts none of these and errors if one is supplied.
+
+## Running the Same Workflow on Different Machines
+
+A workflow file mixes two kinds of information: the processing logic (steps,
+moments, span, thresholds) and the directories where things live on a given
+machine. Checking a workflow file into version control usually means the first
+kind should be shared and the second kind should not — a laptop, a lab server
+and an HPC cluster rarely agree on where `base_data_dir` or `base_archive_dir`
+point.
+
+The `--paths_file FILE` option overrides just the directory parameters, kept in
+a separate file that you do not check in (or check in per-machine, outside the
+workflow file). It recognizes five variables, all optional:
+
+```julia
+# my_paths.jl
+base_data_dir    = "/mnt/radar/raw"
+base_working_dir = "/scratch/sparrow/work"
+base_archive_dir = "/mnt/radar/archive"
+base_plot_dir    = "/mnt/radar/plots"
+date_subdir      = false
+```
+
+Run the workflow with:
+
+```bash
+sparrow my_workflow.jl --paths_file my_paths.jl --datetime 20240101
+```
+
+Whichever of the five variables the file defines override the matching values
+already set in the workflow file; anything the file leaves out is untouched.
+Any other variable the file defines is ignored by Sparrow — a paths file can
+still define e.g. a `qc_base` variable for a workflow's own step functions to
+read back out, but Sparrow itself only looks at the five names above. A paths
+file that defines none of them is an error. See
+[`workflows/path_parameters_example.jl`](https://github.com/csu-tropical/Sparrow.jl/blob/main/workflows/path_parameters_example.jl)
+in the repository for a runnable example.
 
 ## Understanding Workflow Parameters
 
