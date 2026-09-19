@@ -51,7 +51,20 @@ Pkg.add(url="https://github.com/csu-tropical/Sparrow.jl")
 
 This will install the latest version of the code, but any updates to the code will not be reflected in your installation. You can then update the package with `Pkg.update()` which will update all packages in your environment.
 
-If you want to actively develop or modify Sparrow then you can clone the repository code and install in development mode. After cloning, in the REPL, go into Package mode by pressing `]`. You will see the REPL change color and indicate `pkg` mode. You can install the module using `dev /path/to/Sparrow.jl` in `pkg` mode. This will update the module as changes are made to the code. You should see the dependencies being installed, and then the package will be precompiled. After installing, exit Package mode with ctrl-C. 
+#### Optional: Plotting
+
+The `Plot*Step` family of workflow steps (`PlotLargemapStep`, `PlotDBZCompositeStep`, `PlotCompositeStep`, `PlotDBZVelStep`, `PlotDBZRainrateStep`, `PlotRHIStep`, `PlotPPIVolStep`) is provided by a package extension that needs four extra packages, only required if your workflow uses one of these steps:
+
+```julia
+using Pkg
+Pkg.add(["CairoMakie", "GeoMakie", "ColorSchemes", "Images"])
+```
+
+Sparrow loads them automatically whenever they are installed; if they are missing, running a plot step raises an error naming the packages to install.
+
+#### Developing from Cloned Repositories
+
+If you want to actively develop or modify Sparrow or its unregistered dependencies, clone the repositories (Springsteel, Daisho, Ronin, Sparrow — all on GitHub under `csu-tropical`) and install them in development mode, in that dependency order. After cloning, in the REPL, go into Package mode by pressing `]`. You will see the REPL change color and indicate `pkg` mode. Install each module with `dev /path/to/Springsteel.jl`, `dev /path/to/Daisho.jl`, `dev /path/to/Ronin.jl`, then `dev /path/to/Sparrow.jl` in `pkg` mode (or the `Pkg.develop(path=...)` equivalent). This will update each module as changes are made to its source. You should see the dependencies being installed, and then the package will be precompiled. After installing, exit Package mode with ctrl-C. Add the plotting packages above too if your workflow needs them.
 
 Test to make sure the precompilation was successful by running `using Sparrow` in the REPL. If everything is successful then you should get no errors and it will just move to a new line.
 
@@ -97,6 +110,13 @@ Save as `my_workflow.jl` and run on the day you have data for:
 ```bash
 sparrow my_workflow.jl --datetime 20260101_120000
 ```
+
+By default Sparrow expects the input files in a `YYYYMMDD/` subdirectory of
+`base_data_dir` (`/path/to/your/radar/files/20260101/`). If your files sit
+directly in that directory instead, add `date_subdir = false`; if the date
+sits somewhere else in your archive layout, a placeholder such as
+`base_data_dir = "/data/{YYYYMMDD}/chivo"` puts it wherever you need. See
+[Customizing the date directory](https://csu-tropical.github.io/Sparrow.jl/dev/workflow_guide/#Customizing-the-date-directory) for details.
 
 ### Custom Step Example
 
@@ -166,7 +186,10 @@ Options:
   -v, --verbose LEVEL       Message verbosity (0-4, default: 2)
   --slurm                   Use Slurm cluster manager
   --sge                     Use Sun Grid Engine
-  --paths_file FILE         Override data paths from file
+  --paths_file FILE         Override base_data_dir, base_working_dir, base_archive_dir,
+                            base_plot_dir and/or date_subdir from a separate file, so the
+                            same workflow file runs on different machines. See
+                            https://csu-tropical.github.io/Sparrow.jl/dev/getting_started/#Running-the-Same-Workflow-on-Different-Machines
 ```
 
 ## Documentation

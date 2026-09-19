@@ -420,12 +420,21 @@ workflow = MyWorkflow(
 
 **Module:** `utility.jl`
 
-**Purpose:** Extract scan start time from radar filename.
+**Purpose:** Read the scan start time from a radar data file's contents, not its
+filename.
 
-**Supported Formats:**
-1. **CfRadial**: `cfrad.YYYYMMDD_hhmmss.*`
-2. **Sigmet**: `SEAYYYYMMDD_hhmmss*`
-3. **RAW**: Uses `RadxPrint` to extract metadata
+**How it works:**
+1. Runs `RadxPrint -meta_only` on the file (any format LROSE's Radx library can
+   read: CfRadial-1, Sigmet, DORADE, UF, and 30+ others) and parses the reported
+   `startTimeSecs`. Requires `RadxPrint` on `PATH`.
+2. Falls back to the CfRadial `time_coverage_start` global attribute, read
+   directly via NCDatasets, for formats where `RadxPrint` runs but leaves the
+   start time unset (notably CfRadial 2.0 / `cfrad2.*` files).
+3. If neither works, logs a warning and returns `DateTime(1970, 1, 1)` so
+   callers' time-window filters skip the file rather than erroring.
+
+The filename itself is not parsed by this function; filename-based time
+parsing is handled separately by the internal `_parse_filename_time`.
 
 **Usage:**
 ```julia
@@ -433,7 +442,7 @@ scan_time = get_scan_start("/path/to/cfrad.20240101_120000.nc")
 # Returns: DateTime(2024, 1, 1, 12, 0, 0)
 ```
 
-**Note:** For RAW files, requires `RadxPrint` command-line tool.
+**Note:** Requires the `RadxPrint` command-line tool (from LROSE) on `PATH`.
 
 ---
 

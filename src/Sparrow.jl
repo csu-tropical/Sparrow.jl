@@ -72,12 +72,7 @@ function main(parsed_args)
 
     # Override the paths if a paths file is provided
     if parsed_args["paths_file"] != "none"
-        paths_file = parsed_args["paths_file"]
-        Base.include(Sparrow, paths_file)
-        workflow["base_data_dir"] = Base.invokelatest(getfield, Sparrow, :base_data_dir)
-        workflow["base_working_dir"] = Base.invokelatest(getfield, Sparrow, :base_working_dir)
-        workflow["base_archive_dir"] = Base.invokelatest(getfield, Sparrow, :base_archive_dir)
-        workflow["base_plot_dir"] = Base.invokelatest(getfield, Sparrow, :base_plot_dir)
+        apply_paths_file!(workflow, parsed_args["paths_file"])
     end
 
     # Update message level from workflow if specified and verbose flag is at default (2)
@@ -97,7 +92,11 @@ function main(parsed_args)
         # Surface the real reason so a misconfigured environment (missing
         # weakdeps, precompile/system-library failure) is diagnosable instead
         # of silently disabling all plot steps on the workers.
-        msg_warning("Plot extension packages failed to load; plot steps will not be available. Reason: $e")
+        msg_warning("Plot extension packages (CairoMakie, GeoMakie, ColorSchemes, Images) " *
+                    "failed to load; plot steps (Plot*Step) will not be available until they " *
+                    "are installed. Run `Pkg.add([\"CairoMakie\", \"GeoMakie\", \"ColorSchemes\", \"Images\"])` " *
+                    "in the environment Sparrow runs in; they are loaded automatically at startup. " *
+                    "Reason: $e")
     end
 
     # Setup distributed workers

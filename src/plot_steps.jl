@@ -4,8 +4,9 @@
 # by the SparrowPlotExt package extension, which is activated when the user
 # loads CairoMakie, GeoMakie, ColorSchemes, and Images.
 #
-# Usage: add `using CairoMakie, GeoMakie, ColorSchemes, Images` to your
-# workflow file before using any plot steps.
+# Usage: install CairoMakie, GeoMakie, ColorSchemes and Images in the
+# environment Sparrow runs in; `main` loads them automatically at startup, so a
+# `using` line in the workflow file is optional.
 
 @workflow_step PlotLargemapStep
 @workflow_step PlotDBZCompositeStep
@@ -14,3 +15,13 @@
 @workflow_step PlotDBZRainrateStep
 @workflow_step PlotRHIStep
 @workflow_step PlotPPIVolStep
+
+"""
+    PLOT_STEP_TYPES
+
+The step types implemented by the `SparrowPlotExt` package extension. Used by
+[`run_workflow_step`](@ref) to give a specific error, naming the required
+packages, when one of these steps is used without the extension loaded.
+"""
+const PLOT_STEP_TYPES = (PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep,
+                          PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep)

@@ -122,6 +122,10 @@ end
     include("test_hybrid.jl")
 end
 
+@testset "Configuration Helpers" begin
+    include("test_config.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin
