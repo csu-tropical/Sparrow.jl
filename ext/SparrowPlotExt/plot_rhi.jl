@@ -57,12 +57,14 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotRHIStep},
     kdp_ticks = get_param(workflow, "kdp_ticks", -1:1:4)
     phidp_ticks = get_param(workflow, "phidp_ticks", 0:45:360)
 
-    out_dir = plot_output_dir(workflow, step_name, start_time, output_dir)
-    mkpath(out_dir)
     input_files = readdir(input_dir; join=true)
     filter!(!isdir, input_files)
 
     for file in input_files
+        # Resolve per file so an hour- or minute-resolution base_plot_dir files
+        # each figure under the unit its own input belongs to
+        out_dir = plot_output_dir_for_file(workflow, step_name, file, start_time, output_dir)
+        mkpath(out_dir)
         g = Daisho.read_gridded_rhi(file, p)
 
         # Convert coordinates to km

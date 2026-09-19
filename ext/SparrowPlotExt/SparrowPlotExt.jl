@@ -6,6 +6,7 @@ using Dates, Printf
 using Daisho
 
 import Sparrow: workflow_step, get_param, get_daisho_params, plot_output_dir,
+    plot_output_dir_for_file,
     SparrowWorkflow,
     PlotLargemapStep, PlotDBZCompositeStep, PlotCompositeStep,
     PlotDBZVelStep, PlotDBZRainrateStep, PlotRHIStep, PlotPPIVolStep,

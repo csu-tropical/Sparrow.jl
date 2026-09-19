@@ -9,7 +9,7 @@
     hybrid_output_name(start_time::DateTime) → String
 
 Output filename for a hybrid scan covering the chunk beginning `start_time`.
-Carries the same `YYYYmmdd_HHMMSS` stamp as the gridded products, which
+Carries the same `YYYYMMDD_hhmmss` stamp as the gridded products, which
 `archived_output_exists` relies on to reconcile archived files.
 """
 hybrid_output_name(start_time::DateTime) =
@@ -31,7 +31,7 @@ Requires `daisho_config` with an enabled `[hybrid_scan]` block. Because the
 product usually carries rain rate and hydrometeor ID, `[echo]` should be enabled
 too so those fields exist in the PPI grids.
 
-Writes one `gridded_hybrid_<YYYYmmdd_HHMMSS>.nc` per chunk, in the same layout as
+Writes one `gridded_hybrid_<YYYYMMDD_hhmmss>.nc` per chunk, in the same layout as
 a gridded PPI — so the plotting steps (e.g. `PlotDBZRainrateStep`) read it back
 unchanged.
 """

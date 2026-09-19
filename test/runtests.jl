@@ -102,6 +102,10 @@ end
     include("test_data_sources.jl")
 end
 
+@testset "Output Paths" begin
+    include("test_paths.jl")
+end
+
 @testset "Chunking and Span Resolution" begin
     include("test_chunking.jl")
 end

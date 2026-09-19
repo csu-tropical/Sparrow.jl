@@ -43,7 +43,7 @@ end
                 e
             end
             @test err isa ErrorException
-            @test occursin("YYYYmmdd_HHMMSS", err.msg)
+            @test occursin("YYYYMMDD_hhmmss", err.msg)
         end
     end
 
@@ -63,7 +63,7 @@ end
                 e
             end
             @test err isa ErrorException
-            @test occursin("YYYYmmdd_HHMMSS", err.msg)
+            @test occursin("YYYYMMDD_hhmmss", err.msg)
         end
     end
 

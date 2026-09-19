@@ -5,7 +5,7 @@ function parse_arguments(args)
     @add_arg_table! s begin
         "--datetime"
             help = "Process a period starting at a specific time. Accepted formats: " *
-                   "YYYY, YYYYmm, YYYYmmdd, YYYYmmdd_HH, YYYYmmdd_HHMM, YYYYmmdd_HHMMSS"
+                   "YYYY, YYYYMM, YYYYMMDD, YYYYMMDD_hh, YYYYMMDD_hhmm, YYYYMMDD_hhmmss"
             arg_type = String
             default = "now"
         "--start"

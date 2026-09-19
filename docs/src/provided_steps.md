@@ -208,7 +208,7 @@ Output files are named by the scan start time with second precision, so scans wi
 - `daisho_config` with `[grid.rhi]` configured
 
 **Output:**
-- Files named: `gridded_rhi_YYYYmmdd_HHMMSS_AA.A.nc` (AA.A = fixed angle)
+- Files named: `gridded_rhi_YYYYMMDD_hhmmss_AA.A.nc` (AA.A = fixed angle)
 - Regular 2D grid in range and height coordinates
 
 ---
@@ -228,7 +228,7 @@ Output files are named by the scan start time with second precision, so scans wi
 - `daisho_config` with `[grid.cartesian]` configured (the z-axis settings are ignored)
 
 **Output:**
-- Files named: `gridded_composite_YYYYmmdd_HHMMSS.nc`
+- Files named: `gridded_composite_YYYYMMDD_hhmmss.nc`
 - 2D horizontal composite grid
 
 ---
@@ -248,7 +248,7 @@ Output files are named by the scan start time with second precision, so scans wi
 - `daisho_config` with `[grid.cartesian]` configured
 
 **Output:**
-- Files named: `gridded_volume_YYYYmmdd_HHMMSS.nc`
+- Files named: `gridded_volume_YYYYMMDD_hhmmss.nc`
 - 3D Cartesian grid (X, Y, Z)
 
 ---
@@ -268,7 +268,7 @@ Output files are named by the scan start time with second precision, so scans wi
 - `daisho_config` with `[grid.latlon]` configured
 
 **Output:**
-- Files named: `gridded_latlon_YYYYmmdd_HHMMSS.nc`
+- Files named: `gridded_latlon_YYYYMMDD_hhmmss.nc`
 - 3D grid in latitude, longitude, height coordinates
 
 ---
@@ -300,7 +300,7 @@ workflow = MyWorkflow(
 ```
 
 **Output:**
-- Files named: `gridded_ppi_YYYYmmdd_HHMMSS_EE.E.nc` (EE.E = elevation angle)
+- Files named: `gridded_ppi_YYYYMMDD_hhmmss_EE.E.nc` (EE.E = elevation angle)
 - One file per PPI sweep
 - 2D horizontal grids
 
@@ -341,7 +341,7 @@ workflow = MyWorkflow(
 ```
 
 **Output:**
-- Files named: `gridded_qvp_YYYYmmdd_HHMMSS_EE.E.nc`
+- Files named: `gridded_qvp_YYYYMMDD_hhmmss_EE.E.nc`
 - Vertical profiles averaged azimuthally
 - Useful for precipitation microphysics studies
 
@@ -400,7 +400,7 @@ workflow = MyWorkflow(
 ```
 
 **Output:**
-- One file per chunk, named `gridded_hybrid_YYYYmmdd_HHMMSS.nc`
+- One file per chunk, named `gridded_hybrid_YYYYMMDD_hhmmss.nc`
 - Same layout as a gridded PPI, so `Daisho.read_gridded_ppi` and the plot steps read
   it back unchanged
 - Carries the configured fields plus `elevation_angle`, recording which tilt supplied
@@ -423,8 +423,8 @@ workflow = MyWorkflow(
 **Purpose:** Extract scan start time from radar filename.
 
 **Supported Formats:**
-1. **CfRadial**: `cfrad.YYYYmmdd_HHMMSS.*`
-2. **Sigmet**: `SEAYYYYmmdd_HHMMSS*`
+1. **CfRadial**: `cfrad.YYYYMMDD_hhmmss.*`
+2. **Sigmet**: `SEAYYYYMMDD_hhmmss*`
 3. **RAW**: Uses `RadxPrint` to extract metadata
 
 **Usage:**

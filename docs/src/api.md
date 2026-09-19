@@ -397,8 +397,8 @@ The `sparrow` script provides the command-line interface. Options:
 
 ```
 workflow                  Workflow file to execute (required, positional)
---datetime DATETIME       Start of the processing period: YYYY, YYYYmm, YYYYmmdd,
-                          YYYYmmdd_HH, YYYYmmdd_HHMM or YYYYmmdd_HHMMSS (default: "now")
+--datetime DATETIME       Start of the processing period: YYYY, YYYYMM, YYYYMMDD,
+                          YYYYMMDD_hh, YYYYMMDD_hhmm or YYYYMMDD_hhmmss (default: "now")
 --start DATETIME          Start of the processing period (same formats), with --stop
 --stop DATETIME           End of the processing period, exclusive, with --start
 --realtime                Process an incoming realtime datastream

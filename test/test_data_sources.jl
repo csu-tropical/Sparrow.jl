@@ -105,42 +105,57 @@ using Sparrow
 
         # RTMA template
         rtma = S3BucketSource(bucket="test",
-                              prefix_template="{station}.{YYYYmmdd}/",
+                              prefix_template="{station}.{YYYYMMDD}/",
                               extras=Dict("station" => "rtma2p5"))
         @test Sparrow._s3_resolve_prefix(rtma, "20240101") == "rtma2p5.20240101/"
 
         # MRMS template with region and product extras
         mrms = S3BucketSource(bucket="test",
-                              prefix_template="{region}/{product}/{YYYYmmdd}/",
+                              prefix_template="{region}/{product}/{YYYYMMDD}/",
                               extras=Dict("region" => "CONUS", "product" => "QPE_01H"))
         @test Sparrow._s3_resolve_prefix(mrms, "20240903") == "CONUS/QPE_01H/20240903/"
 
         # NBM template with hour
         nbm = S3BucketSource(bucket="test",
-                             prefix_template="blend.{YYYYmmdd}/{HH}/core/",
+                             prefix_template="blend.{YYYYMMDD}/{hh}/core/",
                              extras=Dict("region" => "co"))
         @test Sparrow._s3_resolve_prefix(nbm, "2024010112") == "blend.20240101/12/core/"
 
         # Minute-level date
         subhourly = S3BucketSource(bucket="test",
-                                   prefix_template="{YYYY}/{MM}/{DD}/{HH}{mm}/")
+                                   prefix_template="{YYYY}/{MM}/{DD}/{hh}{mm}/")
         @test Sparrow._s3_resolve_prefix(subhourly, "202409031430") == "2024/09/03/1430/"
 
         # Hour placeholder not resolved when date is day-level only
         nbm_dayonly = S3BucketSource(bucket="test",
-                                     prefix_template="blend.{YYYYmmdd}/{HH}/core/")
+                                     prefix_template="blend.{YYYYMMDD}/{hh}/core/")
         prefix = Sparrow._s3_resolve_prefix(nbm_dayonly, "20240101")
-        @test prefix == "blend.20240101/{HH}/core/"  # {HH} stays unresolved
+        @test prefix == "blend.20240101/{hh}/core/"  # {hh} stays unresolved
+
+        # The legacy spellings {YYYYmmdd} and {HH} still resolve the same way
+        legacy = S3BucketSource(bucket="test",
+                                prefix_template="blend.{YYYYmmdd}/{HH}/core/",
+                                extras=Dict("region" => "co"))
+        @test Sparrow._s3_resolve_prefix(legacy, "2024010112") == "blend.20240101/12/core/"
+        legacy_http = HTTPDirSource(base_url="https://data.noaa.gov/{YYYYmmdd}/{HH}/")
+        @test Sparrow._http_resolve_url(legacy_http, "2024010112") ==
+              "https://data.noaa.gov/20240101/12/"
     end
 
     @testset "S3 hour iteration detection" begin
-        # Template with {HH}, day-level date -> needs iteration
+        # Template with {hh}, day-level date -> needs iteration
         nbm = S3BucketSource(bucket="test",
-                             prefix_template="blend.{YYYYmmdd}/{HH}/core/")
+                             prefix_template="blend.{YYYYMMDD}/{hh}/core/")
         @test Sparrow._s3_needs_hour_iteration(nbm, "20240101") == true
         @test Sparrow._s3_needs_hour_iteration(nbm, "2024010112") == false
 
-        # Template without {HH} -> never needs iteration
+        # The legacy {HH} spelling is detected just the same
+        legacy = S3BucketSource(bucket="test",
+                                prefix_template="blend.{YYYYmmdd}/{HH}/core/")
+        @test Sparrow._s3_needs_hour_iteration(legacy, "20240101") == true
+        @test Sparrow._s3_needs_hour_iteration(legacy, "2024010112") == false
+
+        # Template without {hh} -> never needs iteration
         nexrad = S3BucketSource(bucket="test",
                                 prefix_template="{YYYY}/{MM}/{DD}/")
         @test Sparrow._s3_needs_hour_iteration(nexrad, "20240101") == false
@@ -213,7 +228,7 @@ using Sparrow
         source = RTMASource()
         @test source isa S3BucketSource
         @test source.bucket == "noaa-rtma-pds"
-        @test source.prefix_template == "{station}.{YYYYmmdd}/"
+        @test source.prefix_template == "{station}.{YYYYMMDD}/"
         @test source.extras == Dict("station" => "rtma2p5")
         @test source.file_pattern == r"\.grb2(_wexp)?$"
 
@@ -229,7 +244,7 @@ using Sparrow
         source = NBMSource()
         @test source isa S3BucketSource
         @test source.bucket == "noaa-nbm-grib2-pds"
-        @test source.prefix_template == "blend.{YYYYmmdd}/{HH}/core/"
+        @test source.prefix_template == "blend.{YYYYMMDD}/{hh}/core/"
         @test source.extras == Dict("region" => "co")
         @test source.file_pattern == r"\.grib2$"
 
@@ -249,7 +264,7 @@ using Sparrow
         source = MRMSSource()
         @test source isa S3BucketSource
         @test source.bucket == "noaa-mrms-pds"
-        @test source.prefix_template == "{region}/{product}/{YYYYmmdd}/"
+        @test source.prefix_template == "{region}/{product}/{YYYYMMDD}/"
         @test source.extras == Dict("region" => "CONUS",
                                      "product" => "MergedBaseReflectivity_00.50")
         @test source.file_pattern == r"\.grib2\.gz$"
@@ -300,7 +315,7 @@ using Sparrow
         url = Sparrow._http_resolve_url(source, "20240903")
         @test url == "https://data.noaa.gov/2024/09/03/"
 
-        source2 = HTTPDirSource(base_url="https://data.noaa.gov/{YYYYmmdd}/")
+        source2 = HTTPDirSource(base_url="https://data.noaa.gov/{YYYYMMDD}/")
         url2 = Sparrow._http_resolve_url(source2, "20240903")
         @test url2 == "https://data.noaa.gov/20240903/"
     end

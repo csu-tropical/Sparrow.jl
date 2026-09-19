@@ -38,8 +38,6 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
     marker_lon = get_param(workflow, "marker_lon", nothing)
     marker_lat = get_param(workflow, "marker_lat", nothing)
 
-    out_dir = plot_output_dir(workflow, step_name, start_time, output_dir)
-    mkpath(out_dir)
     files = readdir(input_dir; join=true)
     filter!(!isdir, files)
 
@@ -47,6 +45,11 @@ function workflow_step(workflow::SparrowWorkflow, ::Type{PlotPPIVolStep},
         msg_info("No files found in $(input_dir), skipping PlotPPIVolStep")
         return
     end
+
+    # One figure covers the whole volume, so it is filed under the unit the
+    # first tilt belongs to rather than per input file.
+    out_dir = plot_output_dir_for_file(workflow, step_name, first(files), start_time, output_dir)
+    mkpath(out_dir)
 
     date = Dates.format(start_time, "YYYYmmdd")
     blanking_cbar = [blank_color]
