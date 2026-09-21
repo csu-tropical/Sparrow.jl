@@ -421,17 +421,80 @@ function plot_output_dir_for_file(workflow::SparrowWorkflow, step_name, file,
 end
 
 """
+    resolve_file_pattern(workflow::SparrowWorkflow) → Union{Regex,Nothing}
+
+Compile the optional workflow parameter `file_pattern` into a `Regex`, so a
+workflow can restrict which input files it processes — useful when a directory
+holds files from several radars or instruments that need different processing
+parameters (see [`matches_file_pattern`](@ref)).
+
+Accepts a `Regex` (returned as is), a `String` (compiled with `Regex(...)`, so
+a plain word like `"chivo"` or `"CSAPR2"` matches any filename containing that
+substring, and `r"chivo"i` matches case-insensitively), or `nothing`/absent,
+which matches every file. Any other type, or a `String` that is not a valid
+regular expression, fails at startup via [`msg_error`](@ref) (called from
+[`setup_workflow_params`](@ref)) rather than silently matching nothing.
+"""
+function resolve_file_pattern(workflow::SparrowWorkflow)
+    pattern = get_param(workflow, "file_pattern", nothing)
+    pattern === nothing && return nothing
+    pattern isa Regex && return pattern
+    if pattern isa AbstractString
+        try
+            return Regex(String(pattern))
+        catch e
+            msg_error("Workflow parameter `file_pattern` = $(repr(pattern)) is not a " *
+                      "valid regular expression: $(safe_exception_string(e))")
+        end
+    end
+    msg_error("Workflow parameter `file_pattern` must be a Regex or a String, " *
+              "got $(typeof(pattern)).")
+end
+
+"""
+    matches_file_pattern(pattern::Union{Regex,Nothing}, file) → Bool
+
+True if `file`'s basename matches `pattern` (`occursin(pattern, basename(file))`),
+or always true when `pattern` is `nothing`. The match is against the basename
+only, so a directory component (e.g. a directory named `chivo`) never causes a
+match on its own.
+"""
+matches_file_pattern(pattern::Regex, file) = occursin(pattern, basename(String(file)))
+matches_file_pattern(::Nothing, file) = true
+
+"""
+    filter_by_file_pattern(pattern::Union{Regex,Nothing}, files; log=true) → Vector
+
+`files` restricted to those whose basename [`matches_file_pattern`](@ref)
+`pattern`. With `log` (the default) it reports at debug level how many files
+were excluded when `pattern` is set, since a workflow silently seeing far fewer
+files than expected is otherwise hard to diagnose; the realtime poller passes
+`log=false` because it refilters the same directory every poll.
+"""
+function filter_by_file_pattern(pattern::Union{Regex,Nothing}, files; log::Bool=true)
+    pattern === nothing && return files
+    kept = filter(f -> matches_file_pattern(pattern, f), files)
+    excluded = length(files) - length(kept)
+    log && excluded > 0 && msg_debug("file_pattern $(repr(pattern)) excluded $excluded of " *
+                                      "$(length(files)) file(s)")
+    return kept
+end
+
+"""
     get_data_source(workflow::SparrowWorkflow) → DataSource
 
 Get the data source for a workflow. If `data_source` is set in the workflow
 parameters, return it. Otherwise, create a `LocalDirSource` from `base_data_dir`
-honouring the workflow's `date_subdir` setting.
+honouring the workflow's `date_subdir` setting and its optional `file_pattern`
+(see [`resolve_file_pattern`](@ref)).
 """
 function get_data_source(workflow::SparrowWorkflow)
     if haskey(workflow.params, "data_source")
         return workflow["data_source"]::DataSource
     else
-        return LocalDirSource(workflow["base_data_dir"]; date_subdir=use_date_subdir(workflow))
+        return LocalDirSource(workflow["base_data_dir"];
+                               date_subdir=use_date_subdir(workflow),
+                               file_pattern=something(resolve_file_pattern(workflow), r".*"))
     end
 end
 
@@ -1092,6 +1155,10 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     end
     use_date_subdir(workflow)
 
+    # Validate the optional input filter here too, so a bad regex string fails
+    # at startup rather than partway through the first chunk.
+    resolve_file_pattern(workflow)
+
     # Validate on the main process so a typo fails at startup rather than hours
     # later on a worker part-way through a gridding step.
     resolve_index_time(workflow)
@@ -1345,6 +1412,10 @@ function assign_workers(workflow::SparrowWorkflow)
 
         # Get data source (LocalDirSource if not explicitly set)
         source = get_data_source(workflow)
+        # Resolved once for the whole run, not per poll: a workflow-level filter
+        # that restricts input files (e.g. to one radar among several sharing a
+        # directory) applies whether or not the data source has its own pattern.
+        file_pattern = resolve_file_pattern(workflow)
         # One chunk's worth of history, so a file that lands just after a unit
         # boundary is still found in the directory it was written to.
         span_seconds = resolve_span_seconds(workflow)
@@ -1396,6 +1467,9 @@ function assign_workers(workflow::SparrowWorkflow)
                     end
                     # Files are keyed by basename downstream, so de-duplicate
                     unique!(new_files)
+                    # poll_directory bypasses _list_unit_files, so apply the
+                    # source's own file_pattern here as archive mode does
+                    new_files = _apply_source_pattern(source, new_files)
                     # A flat directory also holds earlier days' files, which have
                     # no markers for the current window; only queue files from the
                     # day the look-back starts in onwards.
@@ -1405,6 +1479,9 @@ function assign_workers(workflow::SparrowWorkflow)
                                                             DateTime(2100))
                     end
                 end
+                # log=false: this runs every poll over the same directory, so the
+                # "excluded N of M" debug line would repeat every few seconds
+                new_files = filter_by_file_pattern(file_pattern, new_files; log=false)
                 append!(files_to_process, new_files)
 
                 msg_trace("Checking for new data at $(now(UTC))...")

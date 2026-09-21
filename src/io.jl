@@ -96,6 +96,10 @@ function link_base_data(date, workflow, raw_working_dir;
                               first(_date_window(_date_string(date)))
         made_cache_dirs = Set{String}()
         remote_files = discover_files(source, date)
+        # The workflow's own file_pattern (if any) applies here too, on top of
+        # whatever pattern the data source itself may already filter by, so a
+        # data_source with no pattern of its own still honours the workflow's.
+        remote_files = filter_by_file_pattern(resolve_file_pattern(workflow), remote_files)
         # Filter by time window to avoid downloading the entire day
         if start_time > DateTime(1970) && stop_time < DateTime(2100)
             remote_files = _filter_files_by_time(remote_files, start_time, stop_time)
@@ -152,6 +156,10 @@ function link_base_data(date, workflow, raw_working_dir;
             window_start, window_stop = _date_window(_date_string(date))
         end
         data_files, found_dir = _list_unit_files(source, window_start, window_stop)
+        # As above: apply the workflow's file_pattern on top of the source's own
+        # (for the default LocalDirSource, get_data_source already gave it the
+        # same pattern, so this is a harmless no-op second pass).
+        data_files = filter_by_file_pattern(resolve_file_pattern(workflow), data_files)
         if !found_dir
             src_data_dirs = unit_dirs(source, window_start, window_stop)
             listed = length(src_data_dirs) == 1 ? first(src_data_dirs) :

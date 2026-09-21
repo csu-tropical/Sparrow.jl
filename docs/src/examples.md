@@ -610,6 +610,95 @@ workflow = ResearchPipeline(
 # (Similar to previous examples)
 ```
 
+## Several radars in one directory
+
+Sometimes one directory mixes files from several radars, each needing its own
+processing parameters. For example, a field campaign directory might hold:
+
+```
+cfrad.20220917_141754.000_to_20220917_141756.177_CSAPR2_RHI.nc
+cfrad.20220917_141807.137_to_20220917_141827.972_chivo_RHI.nc
+cfrad.20220917_141808.387_to_20220917_142238.578_KHGX_SUR.nc
+cfrad.20220917_141810.000_to_20220917_141827.005_CSAPR2_PPI.nc
+cfrad.20220917_141830.763_to_20220917_141841.811_chivo_RHI.nc
+cfrad.20220917_141835.000_to_20220917_141837.177_CSAPR2_RHI.nc
+cfrad.20220917_141851.000_to_20220917_141853.176_CSAPR2_RHI.nc
+cfrad.20220917_141906.000_to_20220917_141908.176_CSAPR2_RHI.nc
+cfrad.20220917_141917.989_to_20220917_141940.470_chivo_RHI.nc
+```
+
+`file_pattern` (see [Filtering input files by
+name](workflow_guide.md#Filtering-input-files-by-name)) selects *which* files a
+workflow sees, but a single workflow cannot yet switch to a different
+`daisho_config` or archive layout per pattern — different variable names or
+output trees per radar mean different parameter sets, and Sparrow's supported
+way to get that is to run one workflow file per radar, each with its own
+`file_pattern`. The `KHGX` files above are simply ignored by both, since
+neither pattern matches them.
+
+`chivo_workflow.jl`:
+
+```julia
+using Sparrow
+
+@workflow_type ChivoWorkflow
+
+workflow = ChivoWorkflow(
+    base_working_dir = "/scratch/sparrow/work",
+    base_archive_dir = "/archive/{YYYYMMDD}/chivo",
+    base_data_dir = "/data/campaign/raw",
+    span_seconds = "10M",
+
+    file_pattern = "chivo",                     # only the chivo cfrad files
+    daisho_config = "/config/chivo_daisho.toml", # chivo's own variable names
+
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+`csapr2_workflow.jl`:
+
+```julia
+using Sparrow
+
+@workflow_type CSAPR2Workflow
+
+workflow = CSAPR2Workflow(
+    base_working_dir = "/scratch/sparrow/work",
+    base_archive_dir = "/archive/{YYYYMMDD}/csapr2",
+    base_data_dir = "/data/campaign/raw",
+    span_seconds = "10M",
+
+    file_pattern = "CSAPR2",                      # only the CSAPR2 cfrad files
+    daisho_config = "/config/csapr2_daisho.toml", # CSAPR2's own variable names
+
+    steps = [
+        ("copy", PassThroughStep, "base_data", true),
+    ],
+)
+```
+
+Both files point at the same `base_data_dir`; the `file_pattern` on each keeps
+them from processing each other's files (or `KHGX`'s), and the distinct
+`base_archive_dir` trees keep their output — and their `.sparrow`
+processed-file markers, see [Where the processed-file markers
+live](workflow_guide.md#Where-the-processed-file-markers-live) — separate.
+Since `base_working_dir` and `base_data_dir` are the same on every machine that
+runs this campaign, share them with a single [`--paths_file`](getting_started.md#Running-the-Same-Workflow-on-Different-Machines):
+
+```julia
+# campaign_paths.jl
+base_data_dir    = "/data/campaign/raw"
+base_working_dir = "/scratch/sparrow/work"
+```
+
+```bash
+sparrow chivo_workflow.jl   --paths_file campaign_paths.jl --datetime 20220917
+sparrow csapr2_workflow.jl  --paths_file campaign_paths.jl --datetime 20220917
+```
+
 ## Tips for Writing Workflows
 
 1. **Start Simple**: Begin with a minimal workflow and add complexity incrementally

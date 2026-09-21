@@ -126,6 +126,10 @@ end
     include("test_config.jl")
 end
 
+@testset "File Pattern Filtering" begin
+    include("test_file_pattern.jl")
+end
+
 # Integration tests (require test data)
 if RUN_INTEGRATION_TESTS
     @testset "Integration Tests" begin
