@@ -37,6 +37,14 @@ Then install the `sparrow` launcher script onto your PATH (default `~/.local/bin
 julia -e 'using Sparrow; Sparrow.install_sparrow_script()'
 ```
 
+The `Plot*Step` family needs four extra packages, only required if your workflow uses a plot step (Sparrow loads them automatically once installed):
+
+```julia
+Pkg.add(["CairoMakie", "GeoMakie", "ColorSchemes", "Images"])
+```
+
+To develop Sparrow or its dependencies from cloned repositories instead, use `Pkg.develop(path=...)` (or `dev` in Package mode) in dependency order: Springsteel, Daisho, Ronin, then Sparrow. See [Developing from Cloned Repositories](@ref) for details.
+
 ### The Simplest Workflow
 
 A workflow file defines a workflow type and a `workflow` variable. The smallest possible workflow uses a single pre-built step and no custom code — `PassThroughStep` just copies files from the data directory to the archive, so you can verify your installation before building anything more complex:
@@ -63,6 +71,13 @@ Save as `my_workflow.jl` and run it on a day you have data for:
 ```bash
 sparrow my_workflow.jl --datetime 20240101_000000
 ```
+
+By default Sparrow expects the input files in a `YYYYMMDD/` subdirectory of
+`base_data_dir` (`/path/to/your/radar/files/20240101/`). If your files sit
+directly in that directory instead, add `date_subdir = false`; if the date sits
+somewhere else in your archive layout, a placeholder such as
+`base_data_dir = "/data/{YYYYMMDD}/chivo"` puts it wherever you need — see
+[Customizing the date directory](@ref).
 
 See [Getting Started](getting_started.md) for a walk-through and [Provided Workflow Steps](provided_steps.md) for the ready-made steps (format conversion, QC, gridding, plotting).
 
@@ -138,8 +153,13 @@ Options:
   -v, --verbose LEVEL       Message verbosity level (0-4, default: 2)
   --slurm                   Use Slurm cluster manager
   --sge                     Use Sun Grid Engine
-  --paths_file FILE         File overriding data paths
+  --paths_file FILE         File overriding base_data_dir, base_working_dir,
+                            base_archive_dir, base_plot_dir and/or date_subdir
 ```
+
+`--paths_file` lets the same workflow file run unmodified on different
+machines by keeping its directory parameters in a separate file; see
+[Running the Same Workflow on Different Machines](@ref) for the file format.
 
 ## Documentation Contents
 

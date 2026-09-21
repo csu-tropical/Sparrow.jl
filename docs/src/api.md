@@ -408,8 +408,14 @@ workflow                  Workflow file to execute (required, positional)
 -v, --verbose LEVEL       Message verbosity level (0-4, default: 2)
 --slurm                   Use Slurm cluster manager
 --sge                     Use Sun Grid Engine
---paths_file FILE         File overriding data paths
+--paths_file FILE         File overriding base_data_dir, base_working_dir,
+                          base_archive_dir, base_plot_dir and/or date_subdir
 ```
+
+`--paths_file` lets the same workflow file run unmodified on different
+machines by keeping its directory parameters in a separate file; see
+[Running the Same Workflow on Different Machines](@ref) in the Getting Started
+guide for the recognized variables and the file format.
 
 **Example:**
 ```bash

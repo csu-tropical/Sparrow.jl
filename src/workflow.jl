@@ -1099,6 +1099,65 @@ function setup_workflow_params(workflow::SparrowWorkflow, parsed_args)
     return workflow
 end
 
+"""
+    apply_paths_file!(workflow::SparrowWorkflow, path::AbstractString) → SparrowWorkflow
+
+Override a workflow's directory parameters from a separate "paths file", so the
+same workflow file can run unmodified on different machines (e.g. a shared
+workflow checked into version control, with per-machine paths kept out of it).
+
+The file at `path` is a plain Julia script that assigns some or all of the five
+recognized variables as top-level globals:
+
+- `base_data_dir`
+- `base_working_dir`
+- `base_archive_dir`
+- `base_plot_dir`
+- `date_subdir`
+
+Each one that the file defines overrides the matching key in `workflow`; any it
+leaves undefined is untouched, and any other global the file defines (e.g. a
+site-specific `qc_base`) is ignored. The file is `include`d into a fresh,
+disposable module rather than into `Sparrow` itself, so calling this more than
+once (as tests do) never collides with a previous call and stray globals never
+leak into the package.
+
+# Throws
+- If `path` does not exist.
+- If the file defines none of the five recognized variables.
+
+# See Also
+- [`setup_workflow_params`](@ref)
+"""
+function apply_paths_file!(workflow::SparrowWorkflow, path::AbstractString)
+    isfile(path) || msg_error("Paths file $path does not exist.")
+
+    # A fresh module per call: repeated calls (e.g. in tests) never collide,
+    # and the file's globals never leak into the Sparrow module itself.
+    m = Module(:SparrowPathsFile)
+    Base.include(m, path)
+
+    recognized_keys = ("base_data_dir", "base_working_dir", "base_archive_dir",
+                        "base_plot_dir", "date_subdir")
+    overridden = String[]
+    for key in recognized_keys
+        sym = Symbol(key)
+        if Base.invokelatest(isdefined, m, sym)
+            workflow[key] = Base.invokelatest(getfield, m, sym)
+            push!(overridden, key)
+        end
+    end
+
+    if isempty(overridden)
+        msg_error("Paths file $path does not define any of the recognized variables: " *
+                   join(recognized_keys, ", ") * ". Other variables are ignored.")
+    end
+
+    msg_info("Overriding workflow parameters from paths file $path: $(join(overridden, ", "))")
+
+    return workflow
+end
+
 # Main function to process radar data
 """
     poll_directory(raw_dir::String) → Vector{String}
@@ -1450,7 +1509,8 @@ partial chunk is *not* processed (a warning is emitted); use
 `start_time`/`stop_time` to process a partial window instead.
 
 The chunk length is `span_seconds`, resolved via [`resolve_span_seconds`](@ref).
-Set `reverse = true` to walk the chunks in reverse chronological order.
+Set `reverse = true` to walk the chunks in reverse chronological order; `reverse`
+is optional and defaults to `false`.
 
 # See Also
 - [`assign_workers`](@ref)
@@ -1466,7 +1526,7 @@ function process_workflow(workflow::SparrowWorkflow)
     # Set the local variables from the workflow
     span_seconds = resolve_span_seconds(workflow)
     force_reprocess = workflow["force_reprocess"]
-    reverse_order = workflow["reverse"]
+    reverse_order = get_param(workflow, "reverse", false)
     # When false (default), any volume that errors aborts the whole batch. Set
     # `skip_failed_volumes = true` in the workflow to log and continue instead.
     skip_failed_volumes = get_param(workflow, "skip_failed_volumes", false)
@@ -1730,6 +1790,12 @@ function run_workflow_step(workflow::SparrowWorkflow, step_num, start_time, stop
         flush(stdout)
         workflow_step(workflow, step_type, input_dir, output_dir;
                      step_name=step_name, step_num=step_num, start_time=start_time, stop_time=stop_time)
+    elseif step_type in PLOT_STEP_TYPES && Base.get_extension(Sparrow, :SparrowPlotExt) === nothing
+        msg_error("Workflow step $(step_name) ($(step_type)) needs the Sparrow plotting extension, " *
+                   "which is not loaded. Install the plotting packages with " *
+                   "`Pkg.add([\"CairoMakie\", \"GeoMakie\", \"ColorSchemes\", \"Images\"])` in the " *
+                   "environment Sparrow runs in; they are loaded automatically at startup " *
+                   "(see the startup warning for why the load failed).")
     else
         msg_error("Workflow step $(step_name) is not implemented by $(typeof(workflow)) or Sparrow provided functions. Please implement workflow_step(workflow::$(typeof(workflow)), step_type::$(step_type), input_dir::String, output_dir::String) to run this workflow step.")
     end
