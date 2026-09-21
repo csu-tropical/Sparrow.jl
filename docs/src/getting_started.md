@@ -396,6 +396,10 @@ Every workflow must have these parameters:
 - `message_level`: Verbosity level (0-4, default: 2)
 - `raw_moment_names`: Names of radar moments in raw data
 - `qc_moment_names`: Names of radar moments after QC
+- `file_pattern`: Only process input files whose basename matches this regex (optional; default: every file)
+  (a `String` such as `"chivo"` is also accepted). Useful when one directory
+  mixes files from several radars — see [Filtering input files by
+  name](workflow_guide.md#Filtering-input-files-by-name).
 
 ### Accessing Parameters
 

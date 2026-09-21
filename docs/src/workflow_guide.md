@@ -222,6 +222,11 @@ workflow = MyWorkflow(
     base_plot_dir = "/plots",      # Output plots directory
     date_subdir = true,            # Append a YYYYMMDD level to the base directories
                                    #   (default true; see "Customizing the date directory")
+
+    # Input file selection
+    file_pattern = r"chivo",       # Only process files whose basename matches this
+                                   #   regex (a String is also accepted, e.g. "CSAPR2");
+                                   #   see "Filtering input files by name"
     
     # Radar-specific
     raw_moment_names = ["DBZ", "VEL", "WIDTH"],
@@ -433,6 +438,41 @@ Two things are deliberately unaffected:
   local input directory — each downloaded file is cached under the unit
   directory its own timestamp belongs to.
 
+#### Filtering input files by name
+
+The optional workflow parameter `file_pattern` restricts which input files a
+workflow processes, by matching a regular expression against each file's
+*basename* (never the directory it lives in) with `occursin`. It is useful
+when a single directory mixes files from several radars or instruments, e.g.
+
+```
+cfrad.20220917_141754.000_to_20220917_141756.177_CSAPR2_RHI.nc
+cfrad.20220917_141807.137_to_20220917_141827.972_chivo_RHI.nc
+cfrad.20220917_141808.387_to_20220917_142238.578_KHGX_SUR.nc
+```
+
+Setting `file_pattern = "chivo"` (or `r"chivo"`) processes only the `chivo`
+files; `file_pattern = "CSAPR2"` processes only the `CSAPR2` files. Both are
+plain substring matches, since an unadorned string compiles to a `Regex` that
+matches anywhere in the name; the match is case-sensitive unless the pattern is
+written with the `i` flag, e.g. `r"chivo"i`. Files that match neither pattern
+(`KHGX` above) are simply ignored by both, rather than causing an error.
+
+`file_pattern` applies in archive runs, in realtime polling, and — for a remote
+`S3BucketSource`/`HTTPDirSource` — before a file is downloaded into the local
+cache. `LocalDirSource` also accepts a `file_pattern` keyword directly
+(`LocalDirSource(base_dir; file_pattern = r"chivo")`), mirroring the remote
+sources, for use when constructing a `data_source` by hand; the workflow-level
+`file_pattern` is applied on top of it either way, so setting it on the
+workflow is enough.
+
+A single workflow's `file_pattern` selects *which* files it sees, not
+per-pattern parameters — if different radars need different Daisho
+configurations or archive layouts (as in the example above), run one workflow
+file per radar, each with its own `file_pattern`, `daisho_config` and
+`base_archive_dir`. See the ["Several radars in one
+directory"](examples.md#Several-radars-in-one-directory) example.
+
 ### Step Input/Output
 
 Each step receives:
@@ -634,13 +674,20 @@ end
 
 ### Custom File Discovery
 
+To restrict which input files a workflow processes at all, use the built-in
+`file_pattern` parameter (see [Filtering input files by name](@ref)); it is
+applied before any step runs, so `input_dir` already contains only matching
+files. A step-level filter is only needed when one step wants a *further*
+subset of the files the workflow selected. Give it its own parameter name so it
+does not collide with the global `file_pattern`:
+
 ```julia
 function Sparrow.workflow_step(workflow::MyWorkflow, ::Type{CustomDiscovery},
                                input_dir::String, output_dir::String;
                                kwargs...)
     
-    # Custom pattern matching
-    pattern = get_param(workflow, "file_pattern", r".*\.nc$")
+    # A step-specific subset of the files the workflow already selected
+    pattern = get_param(workflow, "discovery_pattern", r".*\.nc$")
     
     files = []
     for (root, dirs, filenames) in walkdir(input_dir)

@@ -107,7 +107,7 @@ substitute_date_placeholders(template::AbstractString, date::Date) =
 # --- LocalDirSource ---
 
 """
-    LocalDirSource(base_dir; date_subdir=true) <: DataSource
+    LocalDirSource(base_dir; date_subdir=true, file_pattern=r".*") <: DataSource
 
 Data source backed by a local directory. Default and backward-compatible.
 
@@ -126,24 +126,33 @@ one day, 10 one hour and 12 one minute. `discover_files` and `has_data` read
 every unit directory that window overlaps, so `has_data(source, "20240101")`
 still answers "is there data that day" whatever the directory unit is.
 
+`file_pattern` restricts which files in that directory are read, matched
+against the file's basename with `occursin` — handy when a directory mixes
+files from several radars, e.g. `file_pattern = r"chivo"` to read only the
+`cfrad...chivo...nc` files out of a directory that also holds `CSAPR2` and
+`KHGX` files. Mirrors `file_pattern` on `S3BucketSource`/`HTTPDirSource`.
+
 # Fields
 - `base_dir::String`: Base directory, optionally containing date placeholders
 - `date_subdir::Bool`: Append a `YYYYMMDD` directory level when `base_dir` has
   no placeholder (default `true`)
+- `file_pattern::Regex`: Only files whose basename matches are read (default
+  `r".*"`, matching everything)
 """
 struct LocalDirSource <: DataSource
     base_dir::String
     date_subdir::Bool
-    function LocalDirSource(base_dir::AbstractString, date_subdir::Bool)
+    file_pattern::Regex
+    function LocalDirSource(base_dir::AbstractString, date_subdir::Bool, file_pattern::Regex = r".*")
         # Reject typos such as {yyyy} up front; otherwise every day would just
         # report "no data" against a literal directory name.
         validate_date_placeholders(base_dir, "LocalDirSource base_dir")
-        return new(String(base_dir), date_subdir)
+        return new(String(base_dir), date_subdir, file_pattern)
     end
 end
 
-LocalDirSource(base_dir::AbstractString; date_subdir::Bool = true) =
-    LocalDirSource(base_dir, date_subdir)
+LocalDirSource(base_dir::AbstractString; date_subdir::Bool = true, file_pattern::Regex = r".*") =
+    LocalDirSource(base_dir, date_subdir, file_pattern)
 
 """
     _is_flat(source::LocalDirSource) → Bool
@@ -310,13 +319,28 @@ function _existing_unit_dirs(source::LocalDirSource, start_time::DateTime, stop_
 end
 
 """
+    _apply_source_pattern(source::LocalDirSource, files) → Vector{String}
+
+`files` restricted to basenames matching `source.file_pattern`. Skips the
+`occursin` pass entirely when the pattern is the default `r".*"`, since it
+would match everything and this sits on the hot path of every realtime poll.
+Used by `_list_unit_files` (archive runs) and the realtime poller so both
+modes honour a `LocalDirSource(...; file_pattern=...)` the same way.
+"""
+function _apply_source_pattern(source::LocalDirSource, files)
+    source.file_pattern.pattern == ".*" && return files
+    return filter(f -> occursin(source.file_pattern, basename(f)), files)
+end
+
+"""
     _list_unit_files(source::LocalDirSource, start_time, stop_time) → (Vector{String}, Bool)
 
 Regular, non-hidden files across every unit directory of `source` that the
 window `[start_time, stop_time)` overlaps, de-duplicated and in directory order,
 plus whether any of those directories existed. A flat directory is narrowed to
-the window by filename timestamp. Shared by `discover_files` and the local
-branch of `link_base_data` so the two never drift.
+the window by filename timestamp, and `source.file_pattern` (if not the default
+`r".*"`) narrows the result to basenames it matches. Shared by `discover_files`
+and the local branch of `link_base_data` so the two never drift.
 """
 function _list_unit_files(source::LocalDirSource, start_time::DateTime, stop_time::DateTime)
     files = String[]
@@ -330,6 +354,7 @@ function _list_unit_files(source::LocalDirSource, start_time::DateTime, stop_tim
             msg_warning("Error reading directory $dir: $e")
         end
     end
+    files = _apply_source_pattern(source, files)
     # A flat directory holds every date, so select this window by name
     _is_flat(source) && (files = _filter_names_by_window(files, start_time, stop_time))
     unique!(files)
